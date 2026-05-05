@@ -4,16 +4,17 @@ from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from io import BytesIO
 
-st.set_page_config(page_title="Precificador Elétrico", layout="centered")
+st.set_page_config(page_title="Precificador Elétrico Profissional", layout="centered")
 
 # --- PADRONIZAÇÃO DE NOMES ---
-# Estes nomes DEVEM ser idênticos aos da Sidebar e do Estado Inicial
 N_P_ALTO = "Pontos Altos de Força"
 N_P_BAIXO = "Pontos Baixos e Médios de Força"
 N_LUMI = "Luminárias em Teto/Gesso/PVC"
 N_LED = "Perfil LED em Teto/Gesso/PVC"
 N_DIST = "Fiação de Distribuição"
 N_PADRAO_FIA = "Fiação do Padrão ao Quadro de Disjuntores"
+N_LAJE = "Instalações sobre Laje/Telhados"
+N_SOBREPOSTA = "Instalação de Eletrodutos/Canaletas Sobrepostas"
 N_QUADRO = "Quadro de Disjuntores"
 N_PADRAO_INST = "Instalação do Padrão"
 N_ART = "Projeto e ART"
@@ -22,8 +23,8 @@ N_ART = "Projeto e ART"
 if 'dados_servicos' not in st.session_state:
     st.session_state.dados_servicos = {
         N_P_ALTO: 0, N_P_BAIXO: 0, N_LUMI: 0, N_LED: 0.0,
-        N_DIST: 0.0, N_PADRAO_FIA: 0.0, N_QUADRO: 0, 
-        N_PADRAO_INST: {"incluir": False, "tipo": "Monofásico"},
+        N_DIST: 0.0, N_PADRAO_FIA: 0.0, N_LAJE: 0.0, N_SOBREPOSTA: 0.0,
+        N_QUADRO: 0, N_PADRAO_INST: {"incluir": False, "tipo": "Monofásico"},
         N_ART: False
     }
 
@@ -37,6 +38,8 @@ with st.sidebar:
         N_LED: st.number_input(f"{N_LED} (m)", value=20.0),
         N_DIST: st.number_input(f"{N_DIST} (m)", value=10.0),
         N_PADRAO_FIA: st.number_input(f"{N_PADRAO_FIA} (m)", value=20.0),
+        N_LAJE: st.number_input(f"{N_LAJE} (m)", value=25.0),
+        N_SOBREPOSTA: st.number_input(f"{N_SOBREPOSTA} (m)", value=20.0),
         N_QUADRO: st.number_input(f"{N_QUADRO} (un)", value=20.0),
         N_PADRAO_INST: st.number_input(f"{N_PADRAO_INST} (Base)", value=400.0),
         N_ART: st.number_input(f"{N_ART} (Base)", value=800.0)
@@ -50,33 +53,30 @@ with tab2:
 # --- ABA 1: ENTRADA DINÂMICA ---
 with tab1:
     st.subheader("Configuração por Item")
-    # Pegamos a lista de chaves diretamente dos preços para garantir que existam no dicionário
     lista_opcoes = list(precos.keys())
     escolha = st.selectbox("Selecione o serviço para editar:", lista_opcoes)
     st.divider()
 
-    # PROTEÇÃO CONTRA KEYERROR: Se por acaso a chave não existir no estado, cria ela agora
+    # Garantia de integridade do estado
     if escolha not in st.session_state.dados_servicos:
         if escolha == N_PADRAO_INST:
             st.session_state.dados_servicos[escolha] = {"incluir": False, "tipo": "Monofásico"}
-        elif escolha in [N_LED, N_DIST, N_PADRAO_FIA]:
+        elif escolha in [N_LED, N_DIST, N_PADRAO_FIA, N_LAJE, N_SOBREPOSTA]:
             st.session_state.dados_servicos[escolha] = 0.0
         else:
             st.session_state.dados_servicos[escolha] = 0
 
-    # Lógica de Quantidade (Unidades)
+    # Lógica por tipo de entrada
     if escolha in [N_P_ALTO, N_P_BAIXO, N_LUMI, N_QUADRO]:
         val = st.number_input("Quantidade:", min_value=0, step=1, 
                                value=int(st.session_state.dados_servicos[escolha]), key=f"inp_{escolha}")
         st.session_state.dados_servicos[escolha] = val
         
-    # Lógica de Metragem (Metros)
-    elif escolha in [N_LED, N_DIST, N_PADRAO_FIA]:
+    elif escolha in [N_LED, N_DIST, N_PADRAO_FIA, N_LAJE, N_SOBREPOSTA]:
         val = st.number_input("Metragem (m):", min_value=0.0, step=0.5, 
                                value=float(st.session_state.dados_servicos[escolha]), key=f"inp_{escolha}")
         st.session_state.dados_servicos[escolha] = val
         
-    # Lógica Especial: Instalação do Padrão
     elif escolha == N_PADRAO_INST:
         dado_p = st.session_state.dados_servicos[N_PADRAO_INST]
         inc = st.checkbox("Incluir Instalação do Padrão?", value=dado_p.get("incluir", False))
@@ -84,16 +84,15 @@ with tab1:
                             index=["Monofásico", "Bifásico", "Trifásico"].index(dado_p.get("tipo", "Monofásico")))
         st.session_state.dados_servicos[N_PADRAO_INST] = {"incluir": inc, "tipo": tipo}
         
-    # Lógica Especial: Projeto e ART
     elif escolha == N_ART:
         val = st.checkbox("Incluir Projeto e ART?", value=bool(st.session_state.dados_servicos[N_ART]))
         st.session_state.dados_servicos[N_ART] = val
 
-    st.success(f"Registrado: {escolha}")
+    st.success(f"Registrado no rascunho: {escolha}")
 
 # --- ABA 3: RESUMO E EXCLUSÃO ---
 with tab3:
-    st.subheader("Resumo Final")
+    st.subheader("Resumo Final do Orçamento")
     itens_finais = {}
     soma_base = 0.0
 
@@ -118,7 +117,7 @@ with tab3:
         itens_finais[N_ART] = valor_art_total
 
     if not itens_finais:
-        st.info("Nenhum item selecionado.")
+        st.info("Nenhum serviço configurado até o momento.")
     else:
         for s, v in list(itens_finais.items()):
             c1, c2 = st.columns([0.8, 0.2])
@@ -144,15 +143,15 @@ with tab3:
             style.paragraph_format.line_spacing = 1.5
             style.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
             doc.add_heading('ORÇAMENTO DETALHADO', 0)
-            doc.add_paragraph("Detalhamento:")
+            doc.add_paragraph("Serviços:")
             for s, v in dados.items():
                 p = doc.add_paragraph(style='Normal')
                 p.add_run(f"• {s}: ").bold = True
                 p.add_run(f"R$ {v:.2f}")
             p_total = doc.add_paragraph()
-            p_total.add_run(f"\nVALOR TOTAL: R$ {total_val:.2f}").bold = True
+            p_total.add_run(f"\nVALOR TOTAL DO SERVIÇO: R$ {total_val:.2f}").bold = True
             buf = BytesIO()
             doc.save(buf)
             return buf.getvalue()
 
-        st.download_button("📥 Baixar em Word", gerar_docx(itens_finais, total), "orcamento.docx")
+        st.download_button("📥 Baixar Orçamento (.docx)", gerar_docx(itens_finais, total), "orcamento_eletrico.docx")
