@@ -4,9 +4,9 @@ from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from io import BytesIO
 
-st.set_page_config(page_title="Precificador Elétrico Profissional", layout="centered")
+st.set_page_config(page_title="Precificador Elétrico", layout="centered")
 
-# --- ESTADO DA SESSÃO ---
+# --- INICIALIZAÇÃO DO ESTADO ---
 if 'dados_servicos' not in st.session_state:
     st.session_state.dados_servicos = {
         "Pontos Altos de Força": 0, 
@@ -47,7 +47,7 @@ with tab1:
     st.divider()
 
     if escolha in ["Pontos Altos de Força", "Pontos Baixos e Médios de Força", "Luminárias em Gesso/PVC", "Quadro de Disjuntores"]:
-        label = "Quantidade de pontos:" if "Pontos" in escolha or "Luminárias" in escolha else "Qtd Disjuntores:"
+        label = "Quantidade:" 
         val = st.number_input(label, min_value=0, step=1, value=int(st.session_state.dados_servicos[escolha]), key=f"inp_{escolha}")
         st.session_state.dados_servicos[escolha] = val
         
@@ -56,54 +56,53 @@ with tab1:
         st.session_state.dados_servicos[escolha] = val
         
     elif escolha == "Instalação do Padrão":
-        inc = st.checkbox("Incluir Instalação do Padrão?", value=st.session_state.dados_servicos[escolha]["incluir"])
+        dado_p = st.session_state.dados_servicos["Instalação do Padrão"]
+        inc = st.checkbox("Incluir Instalação do Padrão?", value=dado_p["incluir"])
         tipo = st.selectbox("Tipo de ligação:", ["Monofásico", "Bifásico", "Trifásico"], 
-                            index=["Monofásico", "Bifásico", "Trifásico"].index(st.session_state.dados_servicos[escolha]["tipo"]))
+                            index=["Monofásico", "Bifásico", "Trifásico"].index(dado_p["tipo"]))
         st.session_state.dados_servicos[escolha] = {"incluir": inc, "tipo": tipo}
         
     elif escolha == "Projeto e ART":
         val = st.checkbox("Incluir Projeto e ART?", value=st.session_state.dados_servicos[escolha])
         st.session_state.dados_servicos[escolha] = val
 
-    st.success(f"Alteração registrada para: {escolha}")
+    st.success(f"Registrado: {escolha}")
 
 # --- ABA 3: RESUMO E EXCLUSÃO ---
 with tab3:
     st.subheader("Resumo Final")
-    
     itens_finais = {}
     soma_base = 0.0
 
-    # Processamento dos dados para o resumo
+    # Lógica de processamento segura
     for item, dado in st.session_state.dados_servicos.items():
-        valor_item = 0.0
+        v_item = 0.0
         if item == "Instalação do Padrão":
-            if dado["incluir"]:
+            if isinstance(dado, dict) and dado.get("incluir"):
                 mult = {"Monofásico": 1.0, "Bifásico": 1.4, "Trifásico": 1.7}
-                valor_item = precos[item] * mult[dado["tipo"]]
+                v_item = precos[item] * mult[dado["tipo"]]
         elif item == "Projeto e ART":
-            continue # Calcula depois
+            continue
         else:
-            if dado > 0:
-                valor_item = dado * precos[item]
+            if isinstance(dado, (int, float)) and dado > 0:
+                v_item = dado * precos[item]
         
-        if valor_item > 0:
-            itens_finais[item] = valor_item
-            soma_base += valor_item
+        if v_item > 0:
+            itens_finais[item] = v_item
+            soma_base += v_item
 
     if st.session_state.dados_servicos["Projeto e ART"]:
         itens_finais["Projeto e ART"] = precos["Projeto e ART"] + (soma_base * 0.55)
 
     if not itens_finais:
-        st.info("Nenhum item com valor selecionado.")
+        st.info("Nenhum item selecionado.")
     else:
-        # Exibição com opção de exclusão
         for s, v in list(itens_finais.items()):
-            col_txt, col_btn = st.columns([0.8, 0.2])
-            col_txt.write(f"✅ {s}: **R$ {v:.2f}**")
-            if col_btn.button("🗑️", key=f"del_{s}"):
+            c1, c2 = st.columns([0.8, 0.2])
+            c1.write(f"✅ {s}: **R$ {v:.2f}**")
+            if c2.button("🗑️", key=f"del_{s}"):
                 if s == "Instalação do Padrão":
-                    st.session_state.dados_servicos[s]["incluir"] = False
+                    st.session_state.dados_servicos[s] = {"incluir": False, "tipo": "Monofásico"}
                 elif s == "Projeto e ART":
                     st.session_state.dados_servicos[s] = False
                 else:
@@ -113,7 +112,6 @@ with tab3:
         total = sum(itens_finais.values())
         st.markdown(f"## Total: R$ {total:.2f}")
 
-        # --- FUNÇÃO DOCX ---
         def gerar_docx(dados, total_val):
             doc = Document()
             for sec in doc.sections:
@@ -122,16 +120,13 @@ with tab3:
             style.font.name, style.font.size = 'Arial', Pt(12)
             style.paragraph_format.line_spacing = 1.5
             style.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
-            doc.add_heading('ORÇAMENTO DE SERVIÇOS ELÉTRICOS', 0)
-            doc.add_paragraph("Detalhamento dos valores:")
+            doc.add_heading('ORÇAMENTO DE SERVIÇOS', 0)
             for s, v in dados.items():
                 p = doc.add_paragraph(style='Normal')
                 p.add_run(f"• {s}: ").bold = True
                 p.add_run(f"R$ {v:.2f}")
             p_total = doc.add_paragraph()
             p_total.add_run(f"\nVALOR TOTAL: R$ {total_val:.2f}").bold = True
-            
             buf = BytesIO()
             doc.save(buf)
             return buf.getvalue()
