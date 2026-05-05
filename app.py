@@ -6,7 +6,8 @@ from io import BytesIO
 
 st.set_page_config(page_title="Precificador Elétrico", layout="centered")
 
-# --- PADRONIZAÇÃO DE NOMES (Para evitar erros de digitação) ---
+# --- PADRONIZAÇÃO DE NOMES ---
+# Estes nomes DEVEM ser idênticos aos da Sidebar e do Estado Inicial
 N_P_ALTO = "Pontos Altos de Força"
 N_P_BAIXO = "Pontos Baixos e Médios de Força"
 N_LUMI = "Luminárias em Teto/Gesso/PVC"
@@ -20,13 +21,8 @@ N_ART = "Projeto e ART"
 # --- INICIALIZAÇÃO DO ESTADO ---
 if 'dados_servicos' not in st.session_state:
     st.session_state.dados_servicos = {
-        N_P_ALTO: 0, 
-        N_P_BAIXO: 0,
-        N_LUMI: 0, 
-        N_LED: 0.0,
-        N_DIST: 0.0, 
-        N_PADRAO_FIA: 0.0,
-        N_QUADRO: 0, 
+        N_P_ALTO: 0, N_P_BAIXO: 0, N_LUMI: 0, N_LED: 0.0,
+        N_DIST: 0.0, N_PADRAO_FIA: 0.0, N_QUADRO: 0, 
         N_PADRAO_INST: {"incluir": False, "tipo": "Monofásico"},
         N_ART: False
     }
@@ -54,8 +50,19 @@ with tab2:
 # --- ABA 1: ENTRADA DINÂMICA ---
 with tab1:
     st.subheader("Configuração por Item")
-    escolha = st.selectbox("Selecione o serviço para editar:", list(precos.keys()))
+    # Pegamos a lista de chaves diretamente dos preços para garantir que existam no dicionário
+    lista_opcoes = list(precos.keys())
+    escolha = st.selectbox("Selecione o serviço para editar:", lista_opcoes)
     st.divider()
+
+    # PROTEÇÃO CONTRA KEYERROR: Se por acaso a chave não existir no estado, cria ela agora
+    if escolha not in st.session_state.dados_servicos:
+        if escolha == N_PADRAO_INST:
+            st.session_state.dados_servicos[escolha] = {"incluir": False, "tipo": "Monofásico"}
+        elif escolha in [N_LED, N_DIST, N_PADRAO_FIA]:
+            st.session_state.dados_servicos[escolha] = 0.0
+        else:
+            st.session_state.dados_servicos[escolha] = 0
 
     # Lógica de Quantidade (Unidades)
     if escolha in [N_P_ALTO, N_P_BAIXO, N_LUMI, N_QUADRO]:
@@ -72,14 +79,14 @@ with tab1:
     # Lógica Especial: Instalação do Padrão
     elif escolha == N_PADRAO_INST:
         dado_p = st.session_state.dados_servicos[N_PADRAO_INST]
-        inc = st.checkbox("Incluir Instalação do Padrão?", value=dado_p["incluir"])
+        inc = st.checkbox("Incluir Instalação do Padrão?", value=dado_p.get("incluir", False))
         tipo = st.selectbox("Tipo de ligação:", ["Monofásico", "Bifásico", "Trifásico"], 
-                            index=["Monofásico", "Bifásico", "Trifásico"].index(dado_p["tipo"]))
+                            index=["Monofásico", "Bifásico", "Trifásico"].index(dado_p.get("tipo", "Monofásico")))
         st.session_state.dados_servicos[N_PADRAO_INST] = {"incluir": inc, "tipo": tipo}
         
     # Lógica Especial: Projeto e ART
     elif escolha == N_ART:
-        val = st.checkbox("Incluir Projeto e ART?", value=st.session_state.dados_servicos[N_ART])
+        val = st.checkbox("Incluir Projeto e ART?", value=bool(st.session_state.dados_servicos[N_ART]))
         st.session_state.dados_servicos[N_ART] = val
 
     st.success(f"Registrado: {escolha}")
@@ -95,9 +102,9 @@ with tab3:
         if item == N_PADRAO_INST:
             if isinstance(dado, dict) and dado.get("incluir"):
                 mult = {"Monofásico": 1.0, "Bifásico": 1.4, "Trifásico": 1.7}
-                v_item = precos[item] * mult[dado["tipo"]]
+                v_item = precos[item] * mult.get(dado["tipo"], 1.0)
         elif item == N_ART:
-            continue # Calcula no final
+            continue 
         else:
             if isinstance(dado, (int, float)) and dado > 0:
                 v_item = dado * precos[item]
@@ -106,8 +113,7 @@ with tab3:
             itens_finais[item] = v_item
             soma_base += v_item
 
-    # Cálculo da ART: Fixo + 55% da soma dos outros serviços
-    if st.session_state.dados_servicos[N_ART]:
+    if st.session_state.dados_servicos.get(N_ART):
         valor_art_total = precos[N_ART] + (soma_base * 0.55)
         itens_finais[N_ART] = valor_art_total
 
