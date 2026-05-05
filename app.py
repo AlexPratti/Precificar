@@ -32,13 +32,13 @@ if 'dados_servicos' not in st.session_state:
 with st.sidebar:
     st.header("⚙️ Ajustar Preços Base")
     precos = {
-        N_P_ALTO: st.number_input(f"{N_P_ALTO} (un)", value=30.0),
-        N_P_BAIXO: st.number_input(f"{N_P_BAIXO} (un)", value=20.0),
+        N_P_ALTO: st.number_input(f"{N_P_ALTO} (un)", value=25.0),
+        N_P_BAIXO: st.number_input(f"{N_P_BAIXO} (un)", value=15.0),
         N_LUMI: st.number_input(f"{N_LUMI} (un)", value=50.0),
         N_LED: st.number_input(f"{N_LED} (m)", value=20.0),
         N_DIST: st.number_input(f"{N_DIST} (m)", value=10.0),
         N_PADRAO_FIA: st.number_input(f"{N_PADRAO_FIA} (m)", value=20.0),
-        N_LAJE: st.number_input(f"{N_LAJE} (m)", value=25.0),
+        N_LAJE: st.number_input(f"{N_LAJE} (m)", value=20.0),
         N_SOBREPOSTA: st.number_input(f"{N_SOBREPOSTA} (m)", value=20.0),
         N_QUADRO: st.number_input(f"{N_QUADRO} (un)", value=20.0),
         N_PADRAO_INST: st.number_input(f"{N_PADRAO_INST} (Base)", value=400.0),
