@@ -24,14 +24,14 @@ if 'dados_servicos' not in st.session_state:
 with st.sidebar:
     st.header("⚙️ Ajustar Preços Base")
     precos = {
-        "Pontos Altos de Força": st.number_input("Ponto Alto (un)", value=80.0),
-        "Pontos Baixos e Médios de Força": st.number_input("Ponto Baixo/Médio (un)", value=60.0),
-        "Luminárias em Gesso/PVC": st.number_input("Luminária (un)", value=45.0),
-        "Perfil LED em Gesso/PVC": st.number_input("Perfil LED (m)", value=120.0),
-        "Fiação de Distribuição": st.number_input("Fiação Distr. (m)", value=15.0),
-        "Fiação do Padrão ao Quadro de Disjuntores": st.number_input("Fiação Padrão (m)", value=25.0),
-        "Quadro de Disjuntores": st.number_input("Disjuntor (un)", value=40.0),
-        "Instalação do Padrão": st.number_input("Base Padrão", value=500.0),
+        "Pontos Altos de Força": st.number_input("Ponto Alto (un)", value=30.0),
+        "Pontos Baixos e Médios de Força": st.number_input("Ponto Baixo/Médio (un)", value=20.0),
+        "Luminárias em Teto/Gesso/PVC": st.number_input("Luminária (un)", value=50.0),
+        "Perfil LED em Teto/Gesso/PVC": st.number_input("Perfil LED (m)", value=20.0),
+        "Fiação de Distribuição": st.number_input("Fiação Distr. (m)", value=10.0),
+        "Fiação do Padrão ao Quadro de Disjuntores": st.number_input("Fiação Padrão (m)", value=20.0),
+        "Quadro de Disjuntores": st.number_input("Disjuntor (un)", value=20.0),
+        "Instalação do Padrão": st.number_input("Base Padrão", value=400.0),
         "Projeto e ART": st.number_input("Base Projeto/ART", value=800.0)
     }
 
