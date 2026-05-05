@@ -143,8 +143,8 @@ with tab3:
             style.font.name, style.font.size = 'Arial', Pt(12)
             style.paragraph_format.line_spacing = 1.5
             style.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-            doc.add_heading('ORÇAMENTO DE SERVIÇOS ELÉTRICOS', 0)
-            doc.add_paragraph("Detalhamento de mão de obra:")
+            doc.add_heading('ORÇAMENTO DETALHADO', 0)
+            doc.add_paragraph("Detalhamento:")
             for s, v in dados.items():
                 p = doc.add_paragraph(style='Normal')
                 p.add_run(f"• {s}: ").bold = True
