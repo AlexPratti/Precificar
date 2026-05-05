@@ -6,14 +6,18 @@ from io import BytesIO
 
 st.set_page_config(page_title="Precificador Elétrico Profissional", layout="centered")
 
-# --- ESTADO DA SESSÃO PARA MANTER VALORES ---
+# --- ESTADO DA SESSÃO ---
 if 'dados_servicos' not in st.session_state:
-    # Inicializa o dicionário para guardar as quantidades/metragens de cada item
     st.session_state.dados_servicos = {
-        "Pontos Altos de Força": 0, "Pontos Baixos e Médios de Força": 0,
-        "Luminárias em Gesso/PVC": 0, "Perfil LED em Gesso/PVC": 0.0,
-        "Fiação de Distribuição": 0.0, "Fiação do Padrão ao Quadro de Disjuntores": 0.0,
-        "Quadro de Disjuntores": 0, "Instalação do Padrão": "Monofásico", "Projeto e ART": False
+        "Pontos Altos de Força": 0, 
+        "Pontos Baixos e Médios de Força": 0,
+        "Luminárias em Gesso/PVC": 0, 
+        "Perfil LED em Gesso/PVC": 0.0,
+        "Fiação de Distribuição": 0.0, 
+        "Fiação do Padrão ao Quadro de Disjuntores": 0.0,
+        "Quadro de Disjuntores": 0, 
+        "Instalação do Padrão": {"incluir": False, "tipo": "Monofásico"},
+        "Projeto e ART": False
     }
 
 # --- SIDEBAR: VALORES UNITÁRIOS ---
@@ -33,107 +37,103 @@ with st.sidebar:
 
 tab1, tab2, tab3 = st.tabs(["📋 Lançar Itens", "💰 Tabela de Preços", "📄 Gerar Orçamento"])
 
-# --- ABA 2: VISUALIZAÇÃO ---
 with tab2:
     st.table([{"Serviço": k, "Valor Unitário": f"R$ {v:.2f}"} for k, v in precos.items()])
 
-# --- ABA 1: ENTRADA DINÂMICA (UM POR VEZ) ---
+# --- ABA 1: ENTRADA DINÂMICA ---
 with tab1:
     st.subheader("Configuração por Item")
-    
-    # Seletor que define QUAL entrada aparece na tela
-    escolha = st.selectbox("Selecione o serviço para editar a quantidade/metragem:", list(precos.keys()))
+    escolha = st.selectbox("Selecione o serviço para editar:", list(precos.keys()))
+    st.divider()
 
-    st.info(f"Editando agora: **{escolha}**")
-    
-    # Renderiza APENAS o input da opção selecionada
-    if escolha in ["Pontos Altos de Força", "Pontos Baixos e Médios de Força", "Luminárias em Gesso/PVC"]:
-        val = st.number_input("Digite a quantidade de pontos:", min_value=0, step=1, value=int(st.session_state.dados_servicos[escolha]))
+    if escolha in ["Pontos Altos de Força", "Pontos Baixos e Médios de Força", "Luminárias em Gesso/PVC", "Quadro de Disjuntores"]:
+        label = "Quantidade de pontos:" if "Pontos" in escolha or "Luminárias" in escolha else "Qtd Disjuntores:"
+        val = st.number_input(label, min_value=0, step=1, value=int(st.session_state.dados_servicos[escolha]), key=f"inp_{escolha}")
         st.session_state.dados_servicos[escolha] = val
         
     elif escolha in ["Perfil LED em Gesso/PVC", "Fiação de Distribuição", "Fiação do Padrão ao Quadro de Disjuntores"]:
-        val = st.number_input("Digite a metragem (m):", min_value=0.0, step=0.5, value=float(st.session_state.dados_servicos[escolha]))
-        st.session_state.dados_servicos[escolha] = val
-        
-    elif escolha == "Quadro de Disjuntores":
-        val = st.number_input("Quantidade de disjuntores:", min_value=0, step=1, value=int(st.session_state.dados_servicos[escolha]))
+        val = st.number_input("Metragem (m):", min_value=0.0, step=0.5, value=float(st.session_state.dados_servicos[escolha]), key=f"inp_{escolha}")
         st.session_state.dados_servicos[escolha] = val
         
     elif escolha == "Instalação do Padrão":
-        # Busca o index atual para o selectbox
-        opcoes_padrao = ["Monofásico", "Bifásico", "Trifásico"]
-        idx = opcoes_padrao.index(st.session_state.dados_servicos[escolha])
-        val = st.selectbox("Tipo de ligação:", opcoes_padrao, index=idx)
-        st.session_state.dados_servicos[escolha] = val
+        inc = st.checkbox("Incluir Instalação do Padrão?", value=st.session_state.dados_servicos[escolha]["incluir"])
+        tipo = st.selectbox("Tipo de ligação:", ["Monofásico", "Bifásico", "Trifásico"], 
+                            index=["Monofásico", "Bifásico", "Trifásico"].index(st.session_state.dados_servicos[escolha]["tipo"]))
+        st.session_state.dados_servicos[escolha] = {"incluir": inc, "tipo": tipo}
         
     elif escolha == "Projeto e ART":
-        val = st.checkbox("Incluir Projeto e ART no orçamento?", value=st.session_state.dados_servicos[escolha])
+        val = st.checkbox("Incluir Projeto e ART?", value=st.session_state.dados_servicos[escolha])
         st.session_state.dados_servicos[escolha] = val
 
-    st.success(f"Valor registrado para {escolha}!")
+    st.success(f"Alteração registrada para: {escolha}")
 
-# --- ABA 3: CÁLCULOS FINAIS E WORD ---
+# --- ABA 3: RESUMO E EXCLUSÃO ---
 with tab3:
-    st.subheader("Resumo Final do Orçamento")
+    st.subheader("Resumo Final")
     
-    itens_com_valor = {}
-    soma_servicos_para_art = 0.0
+    itens_finais = {}
+    soma_base = 0.0
 
-    # Lógica de Cálculo
-    for item, input_val in st.session_state.dados_servicos.items():
-        subtotal = 0.0
-        if input_val == 0 or input_val == 0.0 or input_val is False: continue
+    # Processamento dos dados para o resumo
+    for item, dado in st.session_state.dados_servicos.items():
+        valor_item = 0.0
+        if item == "Instalação do Padrão":
+            if dado["incluir"]:
+                mult = {"Monofásico": 1.0, "Bifásico": 1.4, "Trifásico": 1.7}
+                valor_item = precos[item] * mult[dado["tipo"]]
+        elif item == "Projeto e ART":
+            continue # Calcula depois
+        else:
+            if dado > 0:
+                valor_item = dado * precos[item]
         
-        if item in ["Pontos Altos de Força", "Pontos Baixos e Médios de Força", "Luminárias em Gesso/PVC", "Quadro de Disjuntores"]:
-            subtotal = input_val * precos[item]
-        elif item in ["Perfil LED em Gesso/PVC", "Fiação de Distribuição", "Fiação do Padrão ao Quadro de Disjuntores"]:
-            subtotal = input_val * precos[item]
-        elif item == "Instalação do Padrão":
-            mult = {"Monofásico": 1.0, "Bifásico": 1.4, "Trifásico": 1.7}
-            subtotal = precos[item] * mult[input_val]
-        
-        if item != "Projeto e ART":
-            itens_com_valor[item] = subtotal
-            soma_servicos_para_art += subtotal
+        if valor_item > 0:
+            itens_finais[item] = valor_item
+            soma_base += valor_item
 
-    # Cálculo da ART (Fixo + 55% dos outros)
     if st.session_state.dados_servicos["Projeto e ART"]:
-        valor_art = precos["Projeto e ART"] + (soma_servicos_para_art * 0.55)
-        itens_com_valor["Projeto e ART"] = valor_art
+        itens_finais["Projeto e ART"] = precos["Projeto e ART"] + (soma_base * 0.55)
 
-    if not itens_com_valor:
-        st.warning("Nenhum valor lançado na Aba 1.")
+    if not itens_finais:
+        st.info("Nenhum item com valor selecionado.")
     else:
-        total_geral = sum(itens_com_valor.values())
-        for s, v in itens_com_valor.items():
-            st.write(f"✅ {s}: **R$ {v:.2f}**")
+        # Exibição com opção de exclusão
+        for s, v in list(itens_finais.items()):
+            col_txt, col_btn = st.columns([0.8, 0.2])
+            col_txt.write(f"✅ {s}: **R$ {v:.2f}**")
+            if col_btn.button("🗑️", key=f"del_{s}"):
+                if s == "Instalação do Padrão":
+                    st.session_state.dados_servicos[s]["incluir"] = False
+                elif s == "Projeto e ART":
+                    st.session_state.dados_servicos[s] = False
+                else:
+                    st.session_state.dados_servicos[s] = 0
+                st.rerun()
         
-        st.markdown(f"## Total: R$ {total_geral:.2f}")
+        total = sum(itens_finais.values())
+        st.markdown(f"## Total: R$ {total:.2f}")
 
-        # Função de exportação para Word
-        def gerar_docx(dados, total):
+        # --- FUNÇÃO DOCX ---
+        def gerar_docx(dados, total_val):
             doc = Document()
             for sec in doc.sections:
                 sec.top_margin = sec.bottom_margin = sec.left_margin = sec.right_margin = Pt(72)
-            
             style = doc.styles['Normal']
             style.font.name, style.font.size = 'Arial', Pt(12)
             style.paragraph_format.line_spacing = 1.5
             style.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
-            doc.add_heading('ORÇAMENTO DE PRESTAÇÃO DE SERVIÇOS', 0)
-            doc.add_paragraph("Apresentamos abaixo o detalhamento dos serviços elétricos:")
-            
+            doc.add_heading('ORÇAMENTO DE SERVIÇOS ELÉTRICOS', 0)
+            doc.add_paragraph("Detalhamento dos valores:")
             for s, v in dados.items():
                 p = doc.add_paragraph(style='Normal')
                 p.add_run(f"• {s}: ").bold = True
                 p.add_run(f"R$ {v:.2f}")
-            
             p_total = doc.add_paragraph()
-            p_total.add_run(f"\nVALOR TOTAL DO ORÇAMENTO: R$ {total:.2f}").bold = True
+            p_total.add_run(f"\nVALOR TOTAL: R$ {total_val:.2f}").bold = True
             
             buf = BytesIO()
             doc.save(buf)
             return buf.getvalue()
 
-        st.download_button("📥 Baixar Orçamento em Word", gerar_docx(itens_com_valor, total_geral), "orcamento.docx")
+        st.download_button("📥 Baixar em Word", gerar_docx(itens_finais, total), "orcamento.docx")
