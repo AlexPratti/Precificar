@@ -16,6 +16,7 @@ st.markdown(
 )
 
 
+
 #******************************************************************************************
 
 st.set_page_config(page_title="Precificador Elétrico Profissional", layout="centered")
