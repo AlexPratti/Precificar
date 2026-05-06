@@ -4,6 +4,17 @@ from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from io import BytesIO
 
+# ****************************************************************************************
+
+# Isso força o navegador a ler o SEU ícone e permitir a instalação
+st.markdown(
+    f"""
+    <link rel="manifest" href="https://githubusercontent.com">
+    """,
+    unsafe_allow_html=True
+)
+#******************************************************************************************
+
 st.set_page_config(page_title="Precificador Elétrico Profissional", layout="centered")
 
 # --- PADRONIZAÇÃO DE NOMES ---
