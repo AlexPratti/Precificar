@@ -8,13 +8,12 @@ from io import BytesIO
 
 # Isso força o navegador a ler o SEU ícone e permitir a instalação
 st.markdown(
-    """
-    <link rel="manifest" href="https://githubusercontent.com">
+    f"""
+    <link rel="manifest" href="https://raw.githubusercontent.com/AlexPratti/Precificar/refs/heads/main/manifest.json">
     <meta name="theme-color" content="#FF4B4B">
     """,
     unsafe_allow_html=True
 )
-
 
 
 #******************************************************************************************
