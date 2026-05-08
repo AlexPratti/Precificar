@@ -1,22 +1,16 @@
 {
-  "name": "Precificador Elétrico Profissional",
+  "name": "Precificador Elétrico",
   "short_name": "Precificador",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#FF4B4B",
+  "theme_color": "#ff4b4b",
   "icons": [
     {
       "src": "https://githubusercontent.com",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
-      "src": "https://githubusercontent.com",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     }
   ]
 }
