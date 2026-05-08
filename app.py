@@ -4,21 +4,29 @@ from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from io import BytesIO
 
+
+st.set_page_config(page_title="Precificador Elétrico Profissional", layout="centered")
+
+
 # ****************************************************************************************
 
-# Isso força o navegador a ler o SEU ícone e permitir a instalação
+# 2. INJEÇÃO DO MANIFESTO (Ajustado para garantir a leitura)
 st.markdown(
-    f"""
-    <link rel="manifest" href="https://raw.githubusercontent.com/AlexPratti/Precificar/refs/heads/main/manifest.json">
+    """
+    <link rel="manifest" href="https://githubusercontent.com">
     <meta name="theme-color" content="#FF4B4B">
+    <script>
+    // Força a atualização do Service Worker se necessário
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('https://githubusercontent.com');
+    }
+    </script>
     """,
     unsafe_allow_html=True
 )
-
-
 #******************************************************************************************
 
-st.set_page_config(page_title="Precificador Elétrico Profissional", layout="centered")
+
 
 # --- PADRONIZAÇÃO DE NOMES ---
 N_P_ALTO = "Pontos Altos de Força"
