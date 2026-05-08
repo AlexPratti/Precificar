@@ -26,8 +26,8 @@ st.markdown(
 # --- PADRONIZAÇÃO DE NOMES ---
 N_P_ALTO = "Pontos Altos de Força"
 N_P_BAIXO = "Pontos Baixos e Médios de Força"
-N_LUMI = "Luminárias em Teto/Gesso/PVC"
-N_LED = "Perfil LED em Teto/Gesso/PVC"
+N_LUMI = "Luminárias em Parede/Teto/Gesso/PVC"
+N_LED = "Perfil LED em Parede/Teto/Gesso/PVC"
 N_DIST = "Fiação de Distribuição"
 N_PADRAO_FIA = "Fiação do Padrão ao Quadro de Disjuntores"
 N_LAJE = "Instalações sobre Laje/Telhados"
