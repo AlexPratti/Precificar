@@ -14,13 +14,8 @@ st.set_page_config(page_title="Precificador Elétrico Profissional", layout="cen
 st.markdown(
     """
     <link rel="manifest" href="https://githubusercontent.com">
-    <meta name="theme-color" content="#FF4B4B">
-    <script>
-    // Força a atualização do Service Worker se necessário
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('https://githubusercontent.com');
-    }
-    </script>
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     """,
     unsafe_allow_html=True
 )
