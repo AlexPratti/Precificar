@@ -11,6 +11,7 @@ st.set_page_config(page_title="Precificador Elétrico Profissional", layout="cen
 # ****************************************************************************************
 
 # 2. INJEÇÃO DO MANIFESTO (Ajustado para garantir a leitura)
+# COPIE ESTE BLOCO EXATAMENTE ASSIM:
 st.markdown(
     """
     <link rel="manifest" href="https://githubusercontent.com">
@@ -19,6 +20,7 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
 #******************************************************************************************
 
 
