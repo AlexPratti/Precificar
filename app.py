@@ -11,12 +11,10 @@ st.set_page_config(page_title="Precificador Elétrico Profissional", layout="cen
 # ****************************************************************************************
 
 # 2. INJEÇÃO DO MANIFESTO (Ajustado para garantir a leitura)
-# COPIE ESTE BLOCO EXATAMENTE ASSIM:
 st.markdown(
-    """
-    <link rel="manifest" href="https://githubusercontent.com">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+    f"""
+    <link rel="manifest" href="https://raw.githubusercontent.com/AlexPratti/Precificar/refs/heads/main/manifest.json">
+    <meta name="theme-color" content="#FF4B4B">
     """,
     unsafe_allow_html=True
 )
