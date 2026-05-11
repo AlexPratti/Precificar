@@ -59,13 +59,12 @@ with tab2:
             c1, c2, c3 = st.columns(3)
             sec = c1.selectbox("Seção:", ["1,0 mm²", "1,5 mm²", "2,5 mm²", "4,0 mm²", "6,0 mm²", "10 mm²", "16 mm²", "25 mm²", "35 mm²"])
             cor = c2.selectbox("Cor:", ["azul", "preto", "branco", "vermelho", "amarelo", "verde", "verde e amarelo", "cinza", "marrom"])
-            qtd = c3.number_input("Metros:", min_value=0.0, step=1.0)
+            qtd = c3.number_input("Metros:", min_value=0.0, step=1.0, format="%.1f")
             nome_final, unidade = f"Cabo Flexível {sec} {cor}", "m"
 
         elif categoria == "DISJUNTORES":
             c1, c2, c3, c4 = st.columns(4)
-            # Lista de amperagens de 2A até 125A
-            amps = [2, 4, 6, 10, 16, 20, 25, 32, 40, 50, 63, 70, 80, 100, 125]
+            amps = [2, 4, 6, 10, 13, 16, 20, 25, 32, 40, 50, 63, 70, 80, 100, 125]
             amperagens = [f"{a} A" for a in amps]
             corr = c1.selectbox("Corrente Nominal (A):", amperagens)
             fase = c2.selectbox("Polos:", ["Unipolar", "Bipolar", "Tripolar"])
@@ -102,19 +101,21 @@ with tab2:
 
         if st.button("➕ Adicionar à Lista"):
             if nome_final and qtd > 0:
-                # LÓGICA DE SOMA: Percorre toda a lista para verificar duplicatas
-                index_existente = -1
-                for i, item in enumerate(st.session_state.lista_materiais):
-                    if item['nome'] == nome_final and item['uni'] == unidade:
-                        index_existente = i
+                # LÓGICA DE SOMA REFORÇADA
+                encontrado = False
+                for item in st.session_state.lista_materiais:
+                    if item['nome'].strip().lower() == nome_final.strip().lower() and item['uni'] == unidade:
+                        item['qtd'] += qtd
+                        encontrado = True
                         break
                 
-                if index_existente != -1:
-                    st.session_state.lista_materiais[index_existente]['qtd'] += qtd
-                else:
-                    st.session_state.lista_materiais.append({"nome": nome_final, "qtd": qtd, "uni": unidade})
+                if not encontrado:
+                    st.session_state.lista_materiais.append({"nome": nome_final.strip(), "qtd": qtd, "uni": unidade})
                 
-                st.rerun()
+                st.success(f"✓ {nome_final} adicionado com sucesso!")
+                # Removemos o rerun imediato para a mensagem de sucesso aparecer
+            else:
+                st.warning("Preencha a descrição e a quantidade.")
 
 # --- ABA DE CONFERÊNCIA ---
 with tab_conf:
@@ -122,17 +123,19 @@ with tab_conf:
     if not st.session_state.lista_materiais:
         st.info("Nenhum material na lista.")
     else:
-        if st.button("🚨 Limpar Toda a Lista"):
+        col_btn1, col_btn2 = st.columns([0.2, 0.8])
+        if col_btn1.button("🚨 Limpar Lista"):
             st.session_state.lista_materiais = []
             st.rerun()
         
+        st.divider()
         for i, item in enumerate(st.session_state.lista_materiais):
             with st.container(border=True):
                 c1, c2, c3, c4 = st.columns([0.5, 0.15, 0.15, 0.2])
                 st.session_state.lista_materiais[i]['nome'] = c1.text_input("Nome:", item['nome'], key=f"n_{i}")
                 st.session_state.lista_materiais[i]['qtd'] = c2.number_input("Qtd:", value=float(item['qtd']), key=f"q_{i}")
                 st.session_state.lista_materiais[i]['uni'] = c3.text_input("Unid:", item['uni'], key=f"u_{i}")
-                if c4.button("🗑️", key=f"del_{i}"):
+                if c4.button("🗑️ Excluir", key=f"del_{i}"):
                     st.session_state.lista_materiais.pop(i)
                     st.rerun()
 
@@ -179,4 +182,4 @@ with tab3:
         return buf.getvalue()
 
     if total_mo > 0 or st.session_state.lista_materiais:
-        st.download_button("📥 Baixar Documento", gerar_word(itens_orc, st.session_state.lista_materiais, total_mo), "orcamento.docx", type="primary")
+        st.download_button("📥 Baixar Documento Completo", gerar_word(itens_orc, st.session_state.lista_materiais, total_mo), "orcamento.docx", type="primary")
