@@ -53,6 +53,8 @@ with tab2:
     categoria = st.selectbox("Categoria:", ["CABOS", "DISJUNTORES", "MÓDULOS, TOMADAS E PLACAS", "CONDUÍTES", "CONDULETES", "OUTROS"])
     
     with st.container(border=True):
+        nome_final, unidade, qtd = "", "", 0.0
+        
         if categoria == "CABOS":
             c1, c2, c3 = st.columns(3)
             sec = c1.selectbox("Seção:", ["1,0 mm²", "1,5 mm²", "2,5 mm²", "4,0 mm²", "6,0 mm²", "10 mm²", "16 mm²", "25 mm²", "35 mm²"])
@@ -62,12 +64,12 @@ with tab2:
 
         elif categoria == "DISJUNTORES":
             c1, c2, c3, c4 = st.columns(4)
-            amperagens = [2, 4, 6, 10, 16, 20, 25, 32, 40, 50, 63, 70, 80, 100, 125]
+            amperagens = [f"{a} A" for a in [2, 4, 6, 10, 16, 20, 25, 32, 40, 50, 63, 70, 80, 100, 125]]
             corr = c1.selectbox("Corrente Nominal (A):", amperagens)
             fase = c2.selectbox("Polos:", ["Unipolar", "Bipolar", "Tripolar"])
             curva = c3.selectbox("Curva:", ["B", "C", "D"], index=1)
             qtd = c4.number_input("Qtde:", min_value=0, step=1)
-            nome_final, unidade = f"Disjuntor {fase} {curva}{corr}", "un"
+            nome_final, unidade = f"Disjuntor {fase} {curva}{corr.replace(' A', '')}", "un"
 
         elif categoria == "MÓDULOS, TOMADAS E PLACAS":
             c1, c2, c3 = st.columns([0.3, 0.4, 0.3])
@@ -98,44 +100,38 @@ with tab2:
 
         if st.button("➕ Adicionar à Lista"):
             if nome_final and qtd > 0:
-                existe = False
-                for item in st.session_state.lista_materiais:
-                    if item['nome'] == nome_final and item['uni'] == unidade:
-                        item['qtd'] += qtd
-                        existe = True
+                # LÓGICA DE SOMA REFORÇADA
+                encontrado = False
+                for i in range(len(st.session_state.lista_materiais)):
+                    if (st.session_state.lista_materiais[i]['nome'].strip() == nome_final.strip() and 
+                        st.session_state.lista_materiais[i]['uni'] == unidade):
+                        st.session_state.lista_materiais[i]['qtd'] += qtd
+                        encontrado = True
                         break
-                if not existe:
+                
+                if not encontrado:
                     st.session_state.lista_materiais.append({"nome": nome_final, "qtd": qtd, "uni": unidade})
-                st.toast("Item adicionado!")
+                
+                st.toast(f"Item processado: {nome_final}")
                 st.rerun()
 
-# --- ABA DE CONFERÊNCIA (NOVA) ---
+# --- ABA DE CONFERÊNCIA ---
 with tab_conf:
-    st.subheader("🔍 Conferência e Edição de Materiais")
-    
+    st.subheader("🔍 Conferência e Edição")
     if not st.session_state.lista_materiais:
-        st.info("Nenhum material lançado.")
+        st.info("Nenhum material na lista.")
     else:
         if st.button("🚨 Limpar Toda a Lista"):
             st.session_state.lista_materiais = []
             st.rerun()
-            
-        st.divider()
         
         for i, item in enumerate(st.session_state.lista_materiais):
             with st.container(border=True):
                 c1, c2, c3, c4 = st.columns([0.5, 0.15, 0.15, 0.2])
-                
-                # Campos editáveis
-                novo_nome = c1.text_input("Descrição:", value=item['nome'], key=f"edit_n_{i}")
-                nova_qtd = c2.number_input("Qtd:", value=float(item['qtd']), key=f"edit_q_{i}")
-                nova_uni = c3.text_input("Unid:", value=item['uni'], key=f"edit_u_{i}")
-                
-                # Atualização silenciosa no estado
-                st.session_state.lista_materiais[i] = {"nome": novo_nome, "qtd": nova_qtd, "uni": nova_uni}
-                
-                # Botão excluir individual
-                if c4.button("🗑️ Excluir", key=f"excluir_ind_{i}"):
+                st.session_state.lista_materiais[i]['nome'] = c1.text_input("Nome:", item['nome'], key=f"n_{i}")
+                st.session_state.lista_materiais[i]['qtd'] = c2.number_input("Qtd:", value=float(item['qtd']), key=f"q_{i}")
+                st.session_state.lista_materiais[i]['uni'] = c3.text_input("Unid:", item['uni'], key=f"u_{i}")
+                if c4.button("🗑️", key=f"del_{i}"):
                     st.session_state.lista_materiais.pop(i)
                     st.rerun()
 
@@ -152,34 +148,34 @@ with tab3:
     if st.session_state.dados_servicos["Projeto e ART"]:
         itens_orc["Projeto e ART"] = precos["Projeto e ART"] + (soma_serv * 0.55)
     
-    total_mao_obra = sum(itens_orc.values())
-    st.write(f"### Valor Total Mão de Obra: R$ {total_mao_obra:.2f}")
+    total_mo = sum(itens_orc.values())
+    st.write(f"### Total Mão de Obra: R$ {total_mo:.2f}")
 
-    def gerar_word(orc, mats, total_mo):
+    def gerar_word(orc, mats, tot):
         doc = Document()
-        for sec in doc.sections: sec.top_margin = sec.bottom_margin = sec.left_margin = sec.right_margin = Pt(72)
+        for s in doc.sections: s.top_margin = s.bottom_margin = s.left_margin = s.right_margin = Pt(72)
         style = doc.styles['Normal']
         style.font.name, style.font.size, style.paragraph_format.line_spacing = 'Arial', Pt(12), 1.5
         style.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         
         if orc:
             doc.add_heading('ORÇAMENTO DE MÃO DE OBRA', 1)
-            for s, v in orc.items():
-                p = doc.add_paragraph(style='Normal')
-                p.add_run(f"• {s}: ").bold = True
+            for k, v in orc.items():
+                p = doc.add_paragraph()
+                p.add_run(f"• {k}: ").bold = True
                 p.add_run(f"R$ {v:.2f}")
-            p_tot = doc.add_paragraph()
-            p_tot.add_run(f"\nVALOR TOTAL DO ORÇAMENTO: R$ {total_mo:.2f}").bold = True
+            p_t = doc.add_paragraph()
+            p_t.add_run(f"\nVALOR TOTAL DO ORÇAMENTO: R$ {tot:.2f}").bold = True
             if mats: doc.add_page_break()
             
         if mats:
             doc.add_heading('LISTA DE MATERIAIS', 1)
-            for item in mats:
-                doc.add_paragraph(f"• {item['nome']}: {formatar_qtd(item['qtd'], item['uni'])} {item['uni']}", style='Normal')
+            for m in mats:
+                doc.add_paragraph(f"• {m['nome']}: {formatar_qtd(m['qtd'], m['uni'])} {m['uni']}")
         
         buf = BytesIO()
         doc.save(buf)
         return buf.getvalue()
 
-    if total_mao_obra > 0 or st.session_state.lista_materiais:
-        st.download_button("📥 Baixar Orçamento Completo", gerar_word(itens_orc, st.session_state.lista_materiais, total_mao_obra), "orcamento_eletrico.docx", type="primary")
+    if total_mo > 0 or st.session_state.lista_materials:
+        st.download_button("📥 Baixar Documento", gerar_word(itens_orc, st.session_state.lista_materiais, total_mo), "orcamento.docx", type="primary")
