@@ -30,7 +30,7 @@ with st.sidebar:
     precos["Instalação do Padrão"] = st.number_input("Instalação do Padrão", value=400.0)
     precos["Projeto e ART"] = st.number_input("Projeto e ART", value=800.0)
 
-tab1, tab2, tab3 = st.tabs(["📋 Serviços", "📦 Materiais", "📄 Gerar Orçamento"])
+tab1, tab2, tab_conf, tab3 = st.tabs(["📋 Serviços", "📦 Materiais", "🔍 Conferência", "📄 Gerar Orçamento"])
 
 # --- ABA 1: SERVIÇOS ---
 with tab1:
@@ -47,7 +47,7 @@ with tab1:
     elif escolha_serv == "Projeto e ART":
         st.session_state.dados_servicos[escolha_serv] = st.checkbox("Incluir Projeto/ART?", value=st.session_state.dados_servicos[escolha_serv])
 
-# --- ABA 2: MATERIAIS ---
+# --- ABA 2: LANÇAMENTO DE MATERIAIS ---
 with tab2:
     st.subheader("📦 Lançamento de Materiais")
     categoria = st.selectbox("Categoria:", ["CABOS", "DISJUNTORES", "MÓDULOS, TOMADAS E PLACAS", "CONDUÍTES", "CONDULETES", "OUTROS"])
@@ -62,12 +62,12 @@ with tab2:
 
         elif categoria == "DISJUNTORES":
             c1, c2, c3, c4 = st.columns(4)
-            correntes = [f"{a} A" for a in [2, 4, 6, 10, 16, 20, 25, 32, 40, 50, 63, 70, 80, 100, 125]]
-            corr = c1.selectbox("Corrente Nominal:", correntes)
+            amperagens = [2, 4, 6, 10, 16, 20, 25, 32, 40, 50, 63, 70, 80, 100, 125]
+            corr = c1.selectbox("Corrente Nominal (A):", amperagens)
             fase = c2.selectbox("Polos:", ["Unipolar", "Bipolar", "Tripolar"])
             curva = c3.selectbox("Curva:", ["B", "C", "D"], index=1)
             qtd = c4.number_input("Qtde:", min_value=0, step=1)
-            nome_final, unidade = f"Disjuntor {fase} {curva}{corr.replace(' A', '')}", "un"
+            nome_final, unidade = f"Disjuntor {fase} {curva}{corr}", "un"
 
         elif categoria == "MÓDULOS, TOMADAS E PLACAS":
             c1, c2, c3 = st.columns([0.3, 0.4, 0.3])
@@ -93,14 +93,11 @@ with tab2:
             c1, c2, c3 = st.columns([0.5, 0.2, 0.3])
             desc = c1.text_input("Descrição:")
             uni = c2.selectbox("Unid:", ["un", "m", "Pç", "kg"], index=0)
-            # Permite alteração manual se necessário
-            uni_final = st.text_input("Alterar Unid (opcional):", value=uni)
             qtd = c3.number_input("Qtde:", min_value=0.0)
-            nome_final, unidade = desc, uni_final
+            nome_final, unidade = desc, uni
 
         if st.button("➕ Adicionar à Lista"):
             if nome_final and qtd > 0:
-                # Lógica de Soma para Itens Idênticos
                 existe = False
                 for item in st.session_state.lista_materiais:
                     if item['nome'] == nome_final and item['uni'] == unidade:
@@ -109,17 +106,38 @@ with tab2:
                         break
                 if not existe:
                     st.session_state.lista_materiais.append({"nome": nome_final, "qtd": qtd, "uni": unidade})
+                st.toast("Item adicionado!")
                 st.rerun()
 
-    # Exibição
-    st.divider()
-    st.write("### Itens Lançados:")
-    for i, item in enumerate(st.session_state.lista_materiais):
-        col_txt, col_del = st.columns([0.9, 0.1])
-        col_txt.write(f"• {item['nome']} - {formatar_qtd(item['qtd'], item['uni'])} {item['uni']}")
-        if col_del.button("🗑️", key=f"del_mat_{i}"):
-            st.session_state.lista_materiais.pop(i)
+# --- ABA DE CONFERÊNCIA (NOVA) ---
+with tab_conf:
+    st.subheader("🔍 Conferência e Edição de Materiais")
+    
+    if not st.session_state.lista_materiais:
+        st.info("Nenhum material lançado.")
+    else:
+        if st.button("🚨 Limpar Toda a Lista"):
+            st.session_state.lista_materiais = []
             st.rerun()
+            
+        st.divider()
+        
+        for i, item in enumerate(st.session_state.lista_materiais):
+            with st.container(border=True):
+                c1, c2, c3, c4 = st.columns([0.5, 0.15, 0.15, 0.2])
+                
+                # Campos editáveis
+                novo_nome = c1.text_input("Descrição:", value=item['nome'], key=f"edit_n_{i}")
+                nova_qtd = c2.number_input("Qtd:", value=float(item['qtd']), key=f"edit_q_{i}")
+                nova_uni = c3.text_input("Unid:", value=item['uni'], key=f"edit_u_{i}")
+                
+                # Atualização silenciosa no estado
+                st.session_state.lista_materiais[i] = {"nome": novo_nome, "qtd": nova_qtd, "uni": nova_uni}
+                
+                # Botão excluir individual
+                if c4.button("🗑️ Excluir", key=f"excluir_ind_{i}"):
+                    st.session_state.lista_materiais.pop(i)
+                    st.rerun()
 
 # --- ABA 3: EXPORTAÇÃO ---
 with tab3:
@@ -135,7 +153,6 @@ with tab3:
         itens_orc["Projeto e ART"] = precos["Projeto e ART"] + (soma_serv * 0.55)
     
     total_mao_obra = sum(itens_orc.values())
-    
     st.write(f"### Valor Total Mão de Obra: R$ {total_mao_obra:.2f}")
 
     def gerar_word(orc, mats, total_mo):
@@ -153,7 +170,7 @@ with tab3:
                 p.add_run(f"R$ {v:.2f}")
             p_tot = doc.add_paragraph()
             p_tot.add_run(f"\nVALOR TOTAL DO ORÇAMENTO: R$ {total_mo:.2f}").bold = True
-            doc.add_page_break()
+            if mats: doc.add_page_break()
             
         if mats:
             doc.add_heading('LISTA DE MATERIAIS', 1)
@@ -165,4 +182,4 @@ with tab3:
         return buf.getvalue()
 
     if total_mao_obra > 0 or st.session_state.lista_materiais:
-        st.download_button("📥 Baixar Orçamento e Lista", gerar_word(itens_orc, st.session_state.lista_materiais, total_mao_obra), "orcamento_eletrico.docx", type="primary")
+        st.download_button("📥 Baixar Orçamento Completo", gerar_word(itens_orc, st.session_state.lista_materiais, total_mao_obra), "orcamento_eletrico.docx", type="primary")
