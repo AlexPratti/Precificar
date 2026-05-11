@@ -5,17 +5,24 @@ from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from io import BytesIO
 
-# --- CONEXÃO SUPABASE ---
-# Configure no seu arquivo .streamlit/secrets.toml ou no painel do Streamlit Cloud
-try:
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    supabase: Client = create_client(url, key)
-except Exception as e:
-    st.error("Erro nas credenciais do Supabase. Verifique os Secrets.")
-    st.stop()
-
 st.set_page_config(page_title="Sistema de Orçamento Elétrico Profissional", layout="wide")
+
+# --- CONEXÃO SUPABASE (AJUSTADA PARA SEUS SECRETS) ---
+@st.cache_resource
+def init_connection():
+    try:
+        # Nomes alterados para bater com sua imagem (Secrets)
+        url = st.secrets["URL_SUPABASE"]
+        key = st.secrets["KEY_SUPABASE"]
+        return create_client(url, key)
+    except Exception as e:
+        st.error(f"Erro de Conexão: Verifique os nomes no Secrets. Detalhe: {e}")
+        return None
+
+supabase = init_connection()
+
+if supabase is None:
+    st.stop()
 
 # --- INICIALIZAÇÃO DO ESTADO DE MÃO DE OBRA ---
 if 'dados_servicos' not in st.session_state:
@@ -35,25 +42,33 @@ def formatar_qtd(qtd, unidade):
 # --- FUNÇÕES DO BANCO DE DADOS (SUPABASE) ---
 def adicionar_ou_somar_material(nome, qtd, uni):
     nome_chave = nome.strip().lower()
-    # Verifica se já existe a combinação nome + unidade
-    res = supabase.table("orc_eletrico_itens").select("*").eq("orc_item_nome_chave", nome_chave).eq("orc_item_unidade", uni).execute()
-    
-    if res.data:
-        item = res.data[0] # Pega o primeiro registro encontrado
-        nova_qtd = item['orc_item_quantidade'] + qtd
-        supabase.table("orc_eletrico_itens").update({"orc_item_quantidade": nova_qtd}).eq("id", item['id']).execute()
-    else:
-        supabase.table("orc_eletrico_itens").insert({
-            "orc_item_nome_chave": nome_chave,
-            "orc_item_nome_visual": nome.strip(),
-            "orc_item_quantidade": qtd,
-            "orc_item_unidade": uni
-        }).execute()
+    try:
+        res = supabase.table("orc_eletrico_itens").select("*").eq("orc_item_nome_chave", nome_chave).eq("orc_item_unidade", uni).execute()
+        
+        if res.data:
+            item = res.data[0]
+            nova_qtd = item['orc_item_quantidade'] + qtd
+            supabase.table("orc_eletrico_itens").update({"orc_item_quantidade": nova_qtd}).eq("id", item['id']).execute()
+        else:
+            supabase.table("orc_eletrico_itens").insert({
+                "orc_item_nome_chave": nome_chave,
+                "orc_item_nome_visual": nome.strip(),
+                "orc_item_quantidade": qtd,
+                "orc_item_unidade": uni
+            }).execute()
+        return True
+    except Exception as e:
+        st.error(f"Erro ao salvar no banco: {e}")
+        return False
 
 def buscar_materiais():
-    return supabase.table("orc_eletrico_itens").select("*").order("created_at").execute().data
+    try:
+        res = supabase.table("orc_eletrico_itens").select("*").order("created_at").execute()
+        return res.data
+    except:
+        return []
 
-# --- SIDEBAR: PREÇOS ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Preços Mão de Obra")
     precos = {k: st.number_input(k, value=20.0 if "m" in k else 30.0) for k in st.session_state.dados_servicos.keys() if k not in ["Instalação do Padrão", "Projeto e ART"]}
@@ -111,7 +126,7 @@ with tab2:
             else:
                 tipo = c2.selectbox("Tipo:", ["C", "E", "X", "T", "LR", "LL", "LB", "TB", "B"])
                 uni_f = "un"
-            qtd_f = c3.number_input("Qtd/Metros:", min_value=0.0)
+            qtd_f = c3.number_input("Qtd:", min_value=0.0)
             nome_f = f"{cat.title()[:-1]} {sec} {tipo}"
 
         elif cat == "MÓDULOS, TOMADAS E PLACAS":
@@ -129,21 +144,24 @@ with tab2:
 
         if st.button("➕ Adicionar à Lista"):
             if nome_f and qtd_f > 0:
-                adicionar_ou_somar_material(nome_f, qtd_f, uni_f)
-                st.success(f"{nome_f} processado!")
-                st.rerun()
+                if adicionar_ou_somar_material(nome_f, qtd_f, uni_f):
+                    st.success(f"{nome_f} processado!")
+                    st.rerun()
 
 # --- ABA DE CONFERÊNCIA ---
 with tab_conf:
-    st.subheader("🔍 Conferência e Edição (Banco de Dados)")
+    st.subheader("🔍 Conferência e Edição")
     mats_db = buscar_materiais()
     
     if not mats_db:
         st.info("Nenhum material no banco de dados.")
     else:
         if st.button("🚨 Limpar Lista Completa"):
-            supabase.table("orc_eletrico_itens").delete().neq("id", 0).execute()
-            st.rerun()
+            try:
+                supabase.table("orc_eletrico_itens").delete().neq("id", 0).execute()
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao limpar: {e}")
         
         for item in mats_db:
             with st.container(border=True):
@@ -206,5 +224,5 @@ with tab3:
         doc.save(buf)
         return buf.getvalue()
 
-    if total_mo > 0 or mats_db:
+    if total_mo > 0 or buscar_materiais():
         st.download_button("📥 Baixar Documento Completo", gerar_word(itens_orc, total_mo), "orcamento.docx", type="primary")
