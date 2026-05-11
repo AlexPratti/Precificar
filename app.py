@@ -39,26 +39,19 @@ if 'dados_servicos' not in st.session_state:
 def formatar_qtd(qtd, unidade):
     return f"{float(qtd):.1f}" if unidade.lower() == "m" else f"{int(qtd)}"
 
-# --- FUNÇÕES DO BANCO DE DADOS (SUPABASE) ---
+# --- FUNÇÃO DO BANCO DE DADOS (USANDO RPC PARA SOMA GARANTIDA) ---
 def adicionar_ou_somar_material(nome, qtd, uni):
-    nome_chave = nome.strip().lower()
     try:
-        res = supabase.table("orc_eletrico_itens").select("*").eq("orc_item_nome_chave", nome_chave).eq("orc_item_unidade", uni).execute()
-        
-        if res.data:
-            item = res.data[0]
-            nova_qtd = item['orc_item_quantidade'] + qtd
-            supabase.table("orc_eletrico_itens").update({"orc_item_quantidade": nova_qtd}).eq("id", item['id']).execute()
-        else:
-            supabase.table("orc_eletrico_itens").insert({
-                "orc_item_nome_chave": nome_chave,
-                "orc_item_nome_visual": nome.strip(),
-                "orc_item_quantidade": qtd,
-                "orc_item_unidade": uni
-            }).execute()
+        # Chamamos a função 'somar_material' que criamos no SQL
+        supabase.rpc('somar_material', {
+            'p_nome_chave': nome.strip().lower(),
+            'p_nome_visual': nome.strip(),
+            'p_quantidade': float(qtd),
+            'p_unidade': uni
+        }).execute()
         return True
     except Exception as e:
-        st.error(f"Erro ao salvar no banco: {e}")
+        st.error(f"Erro na função de soma: {e}")
         return False
 
 def buscar_materiais():
