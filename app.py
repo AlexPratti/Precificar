@@ -23,7 +23,7 @@ if 'lista_materiais' not in st.session_state:
 def formatar_qtd(qtd, unidade):
     return f"{float(qtd):.1f}" if unidade.lower() == "m" else f"{int(qtd)}"
 
-# --- SIDEBAR: PREÇOS MÃO DE OBRA ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Preços Mão de Obra")
     precos = {k: st.number_input(k, value=20.0 if "m" in k else 30.0) for k in st.session_state.dados_servicos.keys() if k not in ["Instalação do Padrão", "Projeto e ART"]}
@@ -64,7 +64,9 @@ with tab2:
 
         elif categoria == "DISJUNTORES":
             c1, c2, c3, c4 = st.columns(4)
-            amperagens = [f"{a} A" for a in [2, 4, 6, 10, 16, 20, 25, 32, 40, 50, 63, 70, 80, 100, 125]]
+            # Lista de amperagens de 2A até 125A
+            amps = [2, 4, 6, 10, 16, 20, 25, 32, 40, 50, 63, 70, 80, 100, 125]
+            amperagens = [f"{a} A" for a in amps]
             corr = c1.selectbox("Corrente Nominal (A):", amperagens)
             fase = c2.selectbox("Polos:", ["Unipolar", "Bipolar", "Tripolar"])
             curva = c3.selectbox("Curva:", ["B", "C", "D"], index=1)
@@ -88,7 +90,7 @@ with tab2:
             else:
                 tipo = c2.selectbox("Tipo/Modelo:", ["C", "E", "X", "T", "LR", "LL", "LB", "TB", "B"])
                 unidade = "un"
-            qtd = c3.number_input("Qtde/Metros:", min_value=0.0, step=1.0)
+            qtd = c3.number_input("Qtde:", min_value=0.0, step=1.0)
             nome_final = f"{categoria.title()[:-1]} {sec} {tipo}"
 
         elif categoria == "OUTROS":
@@ -100,19 +102,18 @@ with tab2:
 
         if st.button("➕ Adicionar à Lista"):
             if nome_final and qtd > 0:
-                # LÓGICA DE SOMA REFORÇADA
-                encontrado = False
-                for i in range(len(st.session_state.lista_materiais)):
-                    if (st.session_state.lista_materiais[i]['nome'].strip() == nome_final.strip() and 
-                        st.session_state.lista_materiais[i]['uni'] == unidade):
-                        st.session_state.lista_materiais[i]['qtd'] += qtd
-                        encontrado = True
+                # LÓGICA DE SOMA: Percorre toda a lista para verificar duplicatas
+                index_existente = -1
+                for i, item in enumerate(st.session_state.lista_materiais):
+                    if item['nome'] == nome_final and item['uni'] == unidade:
+                        index_existente = i
                         break
                 
-                if not encontrado:
+                if index_existente != -1:
+                    st.session_state.lista_materiais[index_existente]['qtd'] += qtd
+                else:
                     st.session_state.lista_materiais.append({"nome": nome_final, "qtd": qtd, "uni": unidade})
                 
-                st.toast(f"Item processado: {nome_final}")
                 st.rerun()
 
 # --- ABA DE CONFERÊNCIA ---
@@ -177,5 +178,5 @@ with tab3:
         doc.save(buf)
         return buf.getvalue()
 
-    if total_mo > 0 or st.session_state.lista_materials:
+    if total_mo > 0 or st.session_state.lista_materiais:
         st.download_button("📥 Baixar Documento", gerar_word(itens_orc, st.session_state.lista_materiais, total_mo), "orcamento.docx", type="primary")
