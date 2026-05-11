@@ -39,6 +39,11 @@ def extrair_unidade(texto):
         return unidade, descricao
     return "un", texto
 
+def formatar_qtd(qtd, unidade):
+    if unidade.lower() == "m":
+        return f"{float(qtd):.1f}"
+    return f"{int(qtd)}"
+
 def configurar_estilo_base(doc):
     for sec in doc.sections:
         sec.top_margin = sec.bottom_margin = sec.left_margin = sec.right_margin = Pt(72)
@@ -103,10 +108,9 @@ with tab2:
             else:
                 st.session_state.mats_selecionados.pop(nome_limpo, None)
 
-# --- ABA 3: TABELA ---
-with tab2: # Note: tab2 was reused in your request context, but let's point to tab3
-    pass
+# --- ABA 3: TABELA DE PREÇOS ---
 with tab3:
+    st.subheader("Valores de Referência")
     st.table([{"Serviço": k, "Preço": f"R$ {v:.2f}"} for k, v in precos.items()])
 
 # --- ABA 4: GERAR DOCUMENTOS ---
@@ -120,15 +124,16 @@ with tab4:
         v = 0.0
         if it == N_PADRAO_INST and val["incluir"]:
             v = precos[it] * {"Monofásico": 1.0, "Bifásico": 1.4, "Trifásico": 1.7}[val["tipo"]]
-        elif it != N_ART and it != N_PADRAO_INST and val > 0:
+        elif it != N_ART and it != N_PADRAO_INST and isinstance(val, (int, float)) and val > 0:
             v = val * precos[it]
         if v > 0:
             itens_orc[it] = v
             soma_base += v
+    
     if st.session_state.dados_servicos[N_ART]:
         itens_orc[N_ART] = precos[N_ART] + (soma_base * 0.55)
     
-    # Exibição
+    # Exibição na Tela
     col_a, col_b = st.columns(2)
     with col_a:
         st.write("**Mão de Obra:**")
@@ -136,14 +141,16 @@ with tab4:
             st.write(f"• {s}: R$ {v:.2f}")
         st.write(f"**Total Mão de Obra: R$ {sum(itens_orc.values()):.2f}**")
     with col_b:
-        st.write("**Materiais:**")
+        st.write("**Materiais Selecionados:**")
         for m, info in st.session_state.mats_selecionados.items():
-            st.write(f"• {m}: {info['qtd']} {info['uni']}")
+            qtd_f = formatar_qtd(info['qtd'], info['uni'])
+            st.write(f"• {m}: {qtd_f} {info['uni']}")
 
     # Gerador Word
     def gerar_completo(dados_o, dados_m):
         doc = Document()
         configurar_estilo_base(doc)
+        
         if dados_o:
             doc.add_heading('ORÇAMENTO DE MÃO DE OBRA', 0)
             for s, v in dados_o.items():
@@ -152,14 +159,27 @@ with tab4:
                 p.add_run(f"R$ {v:.2f}")
             p_tot = doc.add_paragraph()
             p_tot.add_run(f"\nTOTAL MÃO DE OBRA: R$ {sum(dados_o.values()):.2f}").bold = True
-        if dados_o and dados_m: doc.add_page_break()
+        
+        if dados_o and dados_m: 
+            doc.add_page_break()
+            
         if dados_m:
             doc.add_heading('LISTA DE MATERIAIS', 0)
             for m, info in dados_m.items():
-                doc.add_paragraph(f"• {m}: {info['qtd']} {info['uni']}", style='Normal')
+                qtd_f = formatar_qtd(info['qtd'], info['uni'])
+                doc.add_paragraph(f"• {m}: {qtd_f} {info['uni']}", style='Normal')
+        
         buf = BytesIO()
         doc.save(buf)
         return buf.getvalue()
 
     st.divider()
-    st.download_button("📥 Baixar Documento Completo (.docx)", gerar_completo(itens_orc, st.session_state.mats_selecionados), "orcamento_e_materiais.docx", type="primary")
+    if itens_orc or st.session_state.mats_selecionados:
+        st.download_button(
+            label="📥 Baixar Documento Completo (.docx)", 
+            data=gerar_completo(itens_orc, st.session_state.mats_selecionados), 
+            file_name="orcamento_e_materiais.docx", 
+            type="primary"
+        )
+    else:
+        st.info("Adicione serviços ou materiais para habilitar o download.")
