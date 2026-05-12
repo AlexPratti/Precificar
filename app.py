@@ -33,16 +33,16 @@ with st.sidebar:
     
     # EDITE OS VALORES ABAIXO PARA O SEU COMMIT:
     precos_fixos = {
-        "Pontos Altos de Força": 80.0,
-        "Pontos Baixos e Médios de Força": 60.0,
-        "Luminárias em Teto/Gesso/PVC": 45.0,
-        "Perfil LED em Teto/Gesso/PVC": 120.0,
+        "Pontos Altos de Força": 20.0,
+        "Pontos Baixos e Médios de Força": 15.0,
+        "Luminárias em Teto/Gesso/PVC": 35.0,
+        "Perfil LED em Teto/Gesso/PVC": 20.0,
         "Fiação de Distribuição": 15.0,
         "Fiação do Padrão ao Quadro de Disjuntores": 25.0,
-        "Instalações sobre Laje/Telhados": 35.0,
-        "Instalação de Eletrodutos/Canaletas Sobrepostas": 30.0,
-        "Quadro de Disjuntores": 40.0,
-        "Instalação do Padrão": 500.0,
+        "Instalações sobre Laje/Telhados": 10.0,
+        "Instalação de Eletrodutos/Canaletas Sobrepostas": 15.0,
+        "Quadro de Disjuntores": 15.0,
+        "Instalação do Padrão": 400.0,
         "Projeto e ART": 800.0
     }
 
