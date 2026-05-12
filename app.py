@@ -7,15 +7,14 @@ from io import BytesIO
 
 st.set_page_config(page_title="Sistema Elétrico Profissional", layout="wide")
 
-# --- CONEXÃO SUPABASE ---
-@st.cache_resource
+# --- CONEXÃO SUPABASE (SEM CACHE PARA GARANTIR ATUALIZAÇÃO) ---
 def init_connection():
     try:
         url = st.secrets["URL_SUPABASE"]
         key = st.secrets["KEY_SUPABASE"]
         return create_client(url, key)
     except Exception as e:
-        st.error(f"Erro Crítico de Conexão: {e}")
+        st.error(f"Erro de Conexão: {e}")
         return None
 
 supabase = init_connection()
@@ -32,20 +31,22 @@ if 'dados_servicos' not in st.session_state:
         "Projeto e ART": False
     }
 
-# --- FUNÇÕES DE BANCO DE DADOS (FORÇANDO ESCRITA REAL) ---
+# --- FUNÇÕES AUXILIARES ---
+def formatar_qtd(qtd, unidade):
+    return f"{float(qtd):.1f}" if unidade.lower() == "m" else f"{int(qtd)}"
+
+# --- FUNÇÕES DE BANCO DE DADOS ---
 def adicionar_ou_somar_material(nome, qtd, uni):
     nome_chave = nome.strip().lower()
     try:
-        # 1. Busca real no Supabase
+        # Busca real
         res = supabase.table("orc_eletrico_itens").select("*").eq("orc_item_nome_chave", nome_chave).eq("orc_item_unidade", uni).execute()
         
         if res.data and len(res.data) > 0:
-            # SOMA NO REGISTRO EXISTENTE
-            item_db = res.data[0]
+            item_db = res.data[0] # Acessa o primeiro item da lista
             nova_qtd = float(item_db['orc_item_quantidade']) + float(qtd)
             supabase.table("orc_eletrico_itens").update({"orc_item_quantidade": nova_qtd}).eq("id", item_db['id']).execute()
         else:
-            # INSERE NOVO REGISTRO
             supabase.table("orc_eletrico_itens").insert({
                 "orc_item_nome_chave": nome_chave,
                 "orc_item_nome_visual": nome.strip(),
@@ -54,22 +55,42 @@ def adicionar_ou_somar_material(nome, qtd, uni):
             }).execute()
         return True
     except Exception as e:
-        st.error(f"Falha ao comunicar com Supabase: {e}")
+        st.error(f"Erro no banco: {e}")
         return False
 
 def buscar_materiais():
     try:
-        # Busca sempre do banco, nunca da memória do app
+        # Busca sempre do banco
         res = supabase.table("orc_eletrico_itens").select("*").order("created_at").execute()
         return res.data
-    except Exception as e:
-        st.error(f"Erro ao ler banco: {e}")
+    except:
         return []
 
 # --- INTERFACE ---
 tab1, tab2, tab_conf, tab3 = st.tabs(["📋 Serviços", "📦 Materiais", "🔍 Conferência", "📄 Gerar Orçamento"])
 
-# --- ABA 2: MATERIAIS ---
+# --- ABA 1: SERVIÇOS ---
+with tab1:
+    with st.sidebar:
+        st.header("⚙️ Preços Mão de Obra")
+        precos = {k: st.number_input(k, value=20.0 if "m" in k else 30.0) for k in st.session_state.dados_servicos.keys() if k not in ["Instalação do Padrão", "Projeto e ART"]}
+        precos["Instalação do Padrão"] = st.number_input("Instalação do Padrão", value=400.0)
+        precos["Projeto e ART"] = st.number_input("Projeto e ART", value=800.0)
+
+    escolha_serv = st.selectbox("Selecione o serviço:", list(st.session_state.dados_servicos.keys()))
+    if escolha_serv in ["Pontos Altos de Força", "Pontos Baixos e Médios de Força", "Luminárias em Teto/Gesso/PVC", "Quadro de Disjuntores"]:
+        st.session_state.dados_servicos[escolha_serv] = st.number_input("Quantidade:", min_value=0, step=1, value=int(st.session_state.dados_servicos[escolha_serv]))
+    elif escolha_serv in ["Perfil LED em Teto/Gesso/PVC", "Fiação de Distribuição", "Fiação do Padrão ao Quadro de Disjuntores", "Instalações sobre Laje/Telhados", "Instalação de Eletrodutos/Canaletas Sobrepostas"]:
+        st.session_state.dados_servicos[escolha_serv] = st.number_input("Metragem (m):", min_value=0.0, step=0.5, value=float(st.session_state.dados_servicos[escolha_serv]))
+    elif escolha_serv == "Instalação do Padrão":
+        d = st.session_state.dados_servicos[escolha_serv]
+        inc = st.checkbox("Incluir Padrão?", value=d["incluir"])
+        tipo = st.selectbox("Fase:", ["Monofásico", "Bifásico", "Trifásico"], index=["Monofásico", "Bifásico", "Trifásico"].index(d["tipo"]))
+        st.session_state.dados_servicos[escolha_serv] = {"incluir": inc, "tipo": tipo}
+    elif escolha_serv == "Projeto e ART":
+        st.session_state.dados_servicos[escolha_serv] = st.checkbox("Incluir Projeto/ART?", value=st.session_state.dados_servicos[escolha_serv])
+
+# --- ABA 2: LANÇAMENTO ---
 with tab2:
     st.subheader("📦 Lançamento de Materiais")
     cat = st.selectbox("Categoria:", ["CABOS", "DISJUNTORES", "MÓDULOS, TOMADAS E PLACAS", "CONDUÍTES", "CONDULETES", "OUTROS"])
@@ -81,7 +102,7 @@ with tab2:
             c1, c2, c3 = st.columns(3)
             sec = c1.selectbox("Seção:", ["1,0 mm²", "1,5 mm²", "2,5 mm²", "4,0 mm²", "6,0 mm²", "10 mm²", "16 mm²", "25 mm²", "35 mm²"])
             cor = c2.selectbox("Cor:", ["azul", "preto", "branco", "vermelho", "amarelo", "verde", "verde e amarelo", "cinza", "marrom"])
-            qtd_f = c3.number_input("Metros:", min_value=0.0, step=1.0, key="in_cabo")
+            qtd_f = c3.number_input("Metros:", min_value=0.0, step=1.0, key="cabo_q")
             nome_f, uni_f = f"Cabo Flexível {sec} {cor}", "m"
 
         elif cat == "DISJUNTORES":
@@ -90,58 +111,58 @@ with tab2:
             corr = c1.selectbox("Amperagem:", amps)
             fase = c2.selectbox("Pólos:", ["Unipolar", "Bipolar", "Tripolar"])
             curva = c3.selectbox("Curva:", ["B", "C", "D"], index=1)
-            qtd_f = c4.number_input("Qtd:", min_value=0, step=1, key="in_disj")
+            qtd_f = c4.number_input("Qtd:", min_value=0, step=1, key="disj_q")
             nome_f, uni_f = f"Disjuntor {fase} {curva}{corr.replace(' A', '')}", "un"
 
         elif cat == "MÓDULOS, TOMADAS E PLACAS":
             c1, c2, c3 = st.columns([0.3, 0.4, 0.3])
             tipo = c1.selectbox("Tipo:", ["Placa 4x2", "Placa 4x4", "Módulo Tomada", "Módulo Interruptor", "Three Way"])
-            desc = c2.text_input("Descrição:", key="in_mod")
-            qtd_f = c3.number_input("Qtd:", min_value=0, step=1, key="in_mod_q")
+            desc = c2.text_input("Descrição:", key="mod_d")
+            qtd_f = c3.number_input("Qtd:", min_value=0, step=1, key="mod_q")
             nome_f, uni_f = f"{tipo} {desc}", "pç"
 
         elif cat == "CONDUÍTES" or cat == "CONDULETES":
-            c1, c2, c3 = st.columns(3)
             bits = ['1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"', '2 1/2"', '3"', '4"']
-            sec = c1.selectbox("Bitola:", bits)
-            tipo = st.text_input("Tipo/Modelo:", key="in_tubo")
+            sec = st.selectbox("Bitola:", bits, key="tub_b")
+            tipo = st.text_input("Tipo/Modelo:", key="tub_t")
             uni_f = "m" if cat == "CONDUÍTES" else "un"
-            qtd_f = c3.number_input("Quantidade:", min_value=0.0, key="in_tubo_q")
+            qtd_f = st.number_input("Quantidade:", min_value=0.0, key="tub_q")
             nome_f = f"{cat.title()[:-1]} {sec} {tipo}"
 
         elif cat == "OUTROS":
-            c1, c2, c3 = st.columns([0.5, 0.2, 0.3])
-            nome_f = c1.text_input("Descrição:", key="in_out")
-            uni_f = c2.selectbox("Unid:", ["un", "m", "Pç", "kg"])
-            qtd_f = c3.number_input("Qtd:", min_value=0.0, key="in_out_q")
+            nome_f = st.text_input("Descrição:", key="out_d")
+            uni_f = st.selectbox("Unid:", ["un", "m", "Pç", "kg"], key="out_u")
+            qtd_f = st.number_input("Qtd:", min_value=0.0, key="out_q")
 
-        if st.button("➕ Adicionar à Lista"):
+        if st.button("➕ Adicionar Material"):
             if nome_f and qtd_f > 0:
                 if adicionar_ou_somar_material(nome_f, qtd_f, uni_f):
-                    st.success("Salvo no Supabase!")
+                    st.cache_data.clear() # Limpa o cache para forçar leitura nova
                     st.rerun()
 
 # --- ABA 3: CONFERÊNCIA ---
 with tab_conf:
-    st.subheader("🔍 Conferência (Lendo do Supabase)")
+    st.subheader("🔍 Conferência")
     mats_db = buscar_materiais()
     
     if not mats_db:
-        st.info("O banco de dados está vazio.")
+        st.info("Nenhum material no banco de dados.")
     else:
         if st.button("🚨 Limpar Lista Completa"):
             supabase.table("orc_eletrico_itens").delete().neq("id", 0).execute()
+            st.cache_data.clear()
             st.rerun()
         
         for item in mats_db:
             with st.container(border=True):
-                col1, col2, col3, col4 = st.columns([0.5, 0.15, 0.15, 0.2])
-                n_up = col1.text_input("Item:", item['orc_item_nome_visual'], key=f"n_{item['id']}")
-                q_up = col2.number_input("Qtd:", value=float(item['orc_item_quantidade']), key=f"q_{item['id']}")
-                u_up = col3.text_input("Unid:", item['orc_item_unidade'], key=f"u_{item['id']}")
+                c1, c2, c3, c4 = st.columns([0.5, 0.15, 0.15, 0.2])
+                n_up = c1.text_input("Item:", item['orc_item_nome_visual'], key=f"n_{item['id']}")
+                q_up = c2.number_input("Qtd:", value=float(item['orc_item_quantidade']), key=f"q_{item['id']}")
+                u_up = c3.text_input("Unid:", item['orc_item_unidade'], key=f"u_{item['id']}")
                 
-                if col4.button("🗑️", key=f"del_{item['id']}"):
+                if c4.button("🗑️", key=f"del_{item['id']}"):
                     supabase.table("orc_eletrico_itens").delete().eq("id", item['id']).execute()
+                    st.cache_data.clear()
                     st.rerun()
                 
                 if n_up != item['orc_item_nome_visual'] or q_up != item['orc_item_quantidade'] or u_up != item['orc_item_unidade']:
@@ -152,12 +173,6 @@ with tab_conf:
 
 # --- ABA 4: EXPORTAÇÃO ---
 with tab3:
-    with st.sidebar:
-        st.header("⚙️ Ajuste de Preços")
-        precos = {k: st.number_input(k, value=20.0 if "m" in k else 30.0) for k in st.session_state.dados_servicos.keys() if k not in ["Instalação do Padrão", "Projeto e ART"]}
-        precos["Instalação do Padrão"] = st.number_input("Instalação do Padrão", value=400.0)
-        precos["Projeto e ART"] = st.number_input("Projeto e ART", value=800.0)
-
     itens_orc, soma_mo = {}, 0.0
     for k, v in st.session_state.dados_servicos.items():
         if k == "Instalação do Padrão" and v["incluir"]:
@@ -192,12 +207,12 @@ with tab3:
             doc.add_page_break()
             doc.add_heading('LISTA DE MATERIAIS', 1)
             for m in mats:
-                q_exib = f"{float(m['orc_item_quantidade']):.1f}" if m['orc_item_unidade'] == "m" else f"{int(m['orc_item_quantidade'])}"
+                q_exib = formatar_qtd(m['orc_item_quantidade'], m['orc_item_unidade'])
                 doc.add_paragraph(f"• {m['orc_item_nome_visual']}: {q_exib} {m['orc_item_unidade']}")
         
         buf = BytesIO()
         doc.save(buf)
         return buf.getvalue()
 
-    if total_final_mo > 0 or mats_db:
+    if total_final_mo > 0 or (mats_db and len(mats_db) > 0):
         st.download_button("📥 Baixar Documento Completo", gerar_doc(itens_orc, total_final_mo), "orcamento.docx", type="primary")
