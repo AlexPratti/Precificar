@@ -83,16 +83,24 @@ with tab2:
 
         elif categoria == "MÓDULOS, TOMADAS E PLACAS":
             c1, c2, c3 = st.columns([0.3, 0.4, 0.3])
-            tipo = c1.selectbox("Tipo:", ["Placa 4x2", "Placa 4x4", "Módulo Tomada", "Módulo Interruptor", "Three Way", "For Way"])
-            desc_opcoes = ["1 posto", "2 postos", "3 postos", "4 postos", "5 postos", "6 postos", "10 A", "20 A"]
+            tipo = c1.selectbox("Tipo:", ["Placa 4x2", "Placa 4x4", "Módulo Tomada", "Módulo Interruptor"])
+            
+            # Descrição Dinâmica
+            if tipo == "Módulo Interruptor":
+                desc_opcoes = ["Simples", "Three Way", "Four Way", "Simples com Tomada"]
+            elif tipo == "Módulo Tomada":
+                desc_opcoes = ["10 A", "20 A", "USB", "RJ45", "TV"]
+            else: # Placas
+                desc_opcoes = ["Cega", "1 posto", "2 postos", "3 postos", "4 postos", "6 postos"]
+                
             desc = c2.selectbox("Descrição:", desc_opcoes)
             qtd_f = c3.number_input("Qtde:", min_value=0, step=1, key="in_q_mod")
             nome_f, uni_f = f"{tipo} {desc}", "pç"
 
         elif categoria == "CONDUÍTES" or categoria == "CONDULETES":
             c1, c2, c3 = st.columns(3)
-            bitolas = ['1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"', '2 1/2"', '3"', '4"']
-            sec = c1.selectbox("Bitola:", bitolas)
+            bits = ['1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"', '2 1/2"', '3"', '4"']
+            sec = c1.selectbox("Bitola:", bits)
             if categoria == "CONDUÍTES":
                 tipo_t = st.text_input("Tipo (ex: Corrugado):", key="in_t_cond")
                 uni_f = "m"
@@ -111,10 +119,8 @@ with tab2:
         if st.button("➕ Adicionar à Lista"):
             if nome_f and qtd_f > 0:
                 st.session_state.lista_materiais.append({"nome": nome_f.strip(), "qtd": qtd_f, "uni": uni_f})
-                st.toast(f"✅ {nome_f} adicionado!") # Aviso que não desaparece com rerun
+                st.toast(f"✅ Adicionado: {nome_f}")
                 st.rerun()
-            else:
-                st.warning("Preencha os campos de descrição e quantidade.")
 
 # --- ABA 3: CONFERÊNCIA ---
 with tab_conf:
@@ -184,5 +190,5 @@ with tab3:
         doc.save(buf)
         return buf.getvalue()
 
-    if total_final_mo > 0 or st.session_state.lista_materiais:
+    if total_final_mo > 0 or st.session_state.lista_materials:
         st.download_button("📥 Baixar Documento Completo (.docx)", gerar_word(itens_orc, st.session_state.lista_materiais, total_final_mo), "orcamento_final.docx", type="primary")
