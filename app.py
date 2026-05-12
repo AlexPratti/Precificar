@@ -6,7 +6,7 @@ from io import BytesIO
 
 st.set_page_config(page_title="Sistema Elétrico Profissional", layout="wide")
 
-# --- INICIALIZAÇÃO DO ESTADO (MEMÓRIA DO APP) ---
+# --- INICIALIZAÇÃO DO ESTADO ---
 if 'dados_servicos' not in st.session_state:
     st.session_state.dados_servicos = {
         "Pontos Altos de Força": 0, "Pontos Baixos e Médios de Força": 0,
@@ -32,15 +32,16 @@ with st.sidebar:
     precos = {}
     for k in st.session_state.dados_servicos.keys():
         if k not in ["Instalação do Padrão", "Projeto e ART"]:
-            valor_padrao = 25.0 if "Laje" in k else (20.0 if "Sobrepostas" in k else 30.0)
-            precos[k] = st.number_input(k, value=valor_padrao)
+            # Valores base conforme solicitado anteriormente
+            v_padrao = 25.0 if "Laje" in k else (20.0 if "Sobrepostas" in k else 30.0)
+            precos[k] = st.number_input(k, value=v_padrao)
     
     precos["Instalação do Padrão"] = st.number_input("Instalação do Padrão (Base)", value=400.0)
     precos["Projeto e ART"] = st.number_input("Projeto e ART (Base)", value=800.0)
 
 tab1, tab2, tab_conf, tab3 = st.tabs(["📋 Serviços", "📦 Materiais", "🔍 Conferência", "📄 Gerar Orçamento"])
 
-# --- ABA 1: SERVIÇOS ---
+# --- ABA 1: SERVIÇOS (MÃO DE OBRA) ---
 with tab1:
     st.subheader("Configuração de Mão de Obra")
     escolha_serv = st.selectbox("Selecione o serviço para editar:", list(st.session_state.dados_servicos.keys()))
@@ -57,7 +58,7 @@ with tab1:
     elif escolha_serv == "Projeto e ART":
         st.session_state.dados_servicos[escolha_serv] = st.checkbox("Incluir Projeto/ART?", value=st.session_state.dados_servicos[escolha_serv])
 
-# --- ABA 2: MATERIAIS ---
+# --- ABA 2: MATERIAIS (LANÇAMENTO POR CATEGORIA) ---
 with tab2:
     st.subheader("📦 Lançamento de Materiais")
     categoria = st.selectbox("Categoria:", ["CABOS", "DISJUNTORES", "MÓDULOS, TOMADAS E PLACAS", "CONDUÍTES", "CONDULETES", "OUTROS"])
@@ -69,7 +70,7 @@ with tab2:
             c1, c2, c3 = st.columns(3)
             sec = c1.selectbox("Seção:", ["1,0 mm²", "1,5 mm²", "2,5 mm²", "4,0 mm²", "6,0 mm²", "10 mm²", "16 mm²", "25 mm²", "35 mm²"])
             cor = c2.selectbox("Cor:", ["azul", "preto", "branco", "vermelho", "amarelo", "verde", "verde e amarelo", "cinza", "marrom"])
-            qtd_f = c3.number_input("Metros:", min_value=0.0, step=1.0, key="q_cabo")
+            qtd_f = c3.number_input("Metros:", min_value=0.0, step=1.0, key="in_q_cabo")
             nome_f, uni_f = f"Cabo Flexível {sec} {cor}", "m"
 
         elif categoria == "DISJUNTORES":
@@ -78,52 +79,45 @@ with tab2:
             corr = c1.selectbox("Corrente:", amperagens)
             fase = c2.selectbox("Polos:", ["Unipolar", "Bipolar", "Tripolar"])
             curva = c3.selectbox("Curva:", ["B", "C", "D"], index=1)
-            qtd_f = c4.number_input("Qtde:", min_value=0, step=1, key="q_disj")
+            qtd_f = c4.number_input("Qtde:", min_value=0, step=1, key="in_q_disj")
             nome_f, uni_f = f"Disjuntor {fase} {curva}{corr.replace(' A', '')}", "un"
 
         elif categoria == "MÓDULOS, TOMADAS E PLACAS":
             c1, c2, c3 = st.columns([0.3, 0.4, 0.3])
-            tipo = c1.selectbox("Tipo:", ["Placa 4x2", "Placa 4x4", "Módulo Tomada", "Módulo Interruptor", "Three Way"])
-            desc = c2.text_input("Descrição (ex: 3 postos):", key="mod_d")
-            qtd_f = c3.number_input("Qtde:", min_value=0, step=1, key="mod_q")
+            tipo = c1.selectbox("Tipo:", ["Placa 4x2", "Placa 4x4", "Módulo Tomada", "Módulo Interruptor", "Three Way", "For Way"])
+            desc = c2.text_input("Descrição (ex: 3 postos / 20A):", key="in_desc_mod")
+            qtd_f = c3.number_input("Qtde:", min_value=0, step=1, key="in_q_mod")
             nome_f, uni_f = f"{tipo} {desc}", "pç"
 
         elif categoria == "CONDUÍTES" or categoria == "CONDULETES":
             c1, c2, c3 = st.columns(3)
-            bits = ['1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"', '2 1/2"', '3"', '4"']
-            sec = c1.selectbox("Bitola:", bits)
+            bitolas = ['1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"', '2 1/2"', '3"', '4"']
+            sec = c1.selectbox("Bitola:", bitolas)
             if categoria == "CONDUÍTES":
-                tipo_t = st.text_input("Tipo (ex: Corrugado):", key="cond_t")
+                tipo_t = st.text_input("Tipo (ex: Corrugado):", key="in_t_cond")
                 uni_f = "m"
             else:
-                tipo_t = st.selectbox("Tipo:", ["C", "E", "X", "T", "LR", "LL", "LB", "TB", "B"], key="let_t")
+                tipo_t = st.selectbox("Tipo:", ["C", "E", "X", "T", "LR", "LL", "LB", "TB", "B"], key="in_t_let")
                 uni_f = "un"
-            qtd_f = c3.number_input("Qtd:", min_value=0.0, key="tub_q")
+            qtd_f = c3.number_input("Quantidade:", min_value=0.0, key="in_q_tubo")
             nome_f = f"{categoria.title()[:-1]} {sec} {tipo_t}"
 
         elif categoria == "OUTROS":
             c1, c2, c3 = st.columns([0.5, 0.2, 0.3])
-            nome_f = c1.text_input("Descrição:", key="out_d")
-            uni_f = c2.selectbox("Unid:", ["un", "m", "Pç", "kg"], key="out_u")
-            qtd_f = c3.number_input("Qtde:", min_value=0.0, key="out_q")
+            nome_f = c1.text_input("Descrição:", key="in_desc_out")
+            uni_f = c2.selectbox("Unid:", ["un", "m", "Pç", "kg"], key="in_uni_out")
+            qtd_f = c3.number_input("Qtde:", min_value=0.0, key="in_q_out")
 
         if st.button("➕ Adicionar à Lista"):
             if nome_f and qtd_f > 0:
-                # LÓGICA DE SOMA INTERNA
-                encontrado = False
-                for item in st.session_state.lista_materiais:
-                    if item['nome'].strip().lower() == nome_f.strip().lower() and item['uni'] == uni_f:
-                        item['qtd'] += qtd_f
-                        encontrado = True
-                        break
-                
-                if not encontrado:
-                    st.session_state.lista_materiais.append({"nome": nome_f.strip(), "qtd": qtd_f, "uni": uni_f})
-                
-                st.success(f"✓ {nome_f} adicionado!")
+                st.session_state.lista_materiais.append({"nome": nome_f.strip(), "qtd": qtd_f, "uni": uni_f})
+                st.success(f"✓ {nome_f} adicionado com sucesso!")
+                # O Rerun é necessário para atualizar a aba de conferência
                 st.rerun()
+            else:
+                st.warning("Informe a descrição e a quantidade.")
 
-# --- ABA 3: CONFERÊNCIA ---
+# --- ABA 3: CONFERÊNCIA E EDIÇÃO ---
 with tab_conf:
     st.subheader("🔍 Conferência e Edição Manual")
     if not st.session_state.lista_materiais:
@@ -140,22 +134,25 @@ with tab_conf:
                 st.session_state.lista_materiais[i]['nome'] = c1.text_input("Nome:", item['nome'], key=f"edit_n_{i}")
                 st.session_state.lista_materiais[i]['qtd'] = c2.number_input("Qtd:", value=float(item['qtd']), key=f"edit_q_{i}")
                 st.session_state.lista_materiais[i]['uni'] = c3.text_input("Unid:", item['uni'], key=f"edit_u_{i}")
-                if c4.button("🗑️", key=f"del_it_{i}"):
+                if c4.button("🗑️ Excluir", key=f"del_it_{i}"):
                     st.session_state.lista_materiais.pop(i)
                     st.rerun()
 
-# --- ABA 4: EXPORTAÇÃO ---
+# --- ABA 4: GERAÇÃO DE DOCUMENTO ---
 with tab3:
     itens_orc, soma_mo = {}, 0.0
     for k, v in st.session_state.dados_servicos.items():
         if k == "Instalação do Padrão" and v["incluir"]:
-            val = precos[k] * {"Monofásico": 1.0, "Bifásico": 1.4, "Trifásico": 1.7}[v["tipo"]]
+            # Regras de multiplicadores solicitadas anteriormente
+            mult = {"Monofásico": 1.0, "Bifásico": 1.4, "Trifásico": 1.7}
+            val = precos[k] * mult[v["tipo"]]
             itens_orc[k], soma_mo = val, soma_mo + val
         elif k != "Projeto e ART" and k != "Instalação do Padrão" and v > 0:
             val = v * precos[k]
             itens_orc[k], soma_mo = val, soma_mo + val
     
     if st.session_state.dados_servicos["Projeto e ART"]:
+        # ART = Fixo + 55% sobre os outros serviços
         itens_orc["Projeto e ART"] = precos["Projeto e ART"] + (soma_mo * 0.55)
     
     total_final_mo = sum(itens_orc.values())
@@ -163,7 +160,9 @@ with tab3:
 
     def gerar_word(orc, mats, tot_mo):
         doc = Document()
-        for s in doc.sections: s.top_margin = s.bottom_margin = s.left_margin = s.right_margin = Pt(72)
+        for s in doc.sections: 
+            s.top_margin = s.bottom_margin = s.left_margin = s.right_margin = Pt(72)
+        
         style = doc.styles['Normal']
         style.font.name, style.font.size, style.paragraph_format.line_spacing = 'Arial', Pt(12), 1.5
         style.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
@@ -178,7 +177,7 @@ with tab3:
             p_t.add_run(f"\nVALOR TOTAL DO ORÇAMENTO: R$ {tot_mo:.2f}").bold = True
             
         if mats:
-            doc.add_page_break()
+            if orc: doc.add_page_break()
             doc.add_heading('LISTA DE MATERIAIS', 1)
             for m in mats:
                 q_txt = formatar_qtd(m['qtd'], m['uni'])
@@ -189,4 +188,4 @@ with tab3:
         return buf.getvalue()
 
     if total_final_mo > 0 or st.session_state.lista_materiais:
-        st.download_button("📥 Baixar Documento Completo", gerar_word(itens_orc, st.session_state.lista_materiais, total_final_mo), "orcamento.docx", type="primary")
+        st.download_button("📥 Baixar Documento Completo (.docx)", gerar_word(itens_orc, st.session_state.lista_materiais, total_final_mo), "orcamento_final.docx", type="primary")
