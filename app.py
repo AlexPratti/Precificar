@@ -33,27 +33,33 @@ with st.sidebar:
     for k in st.session_state.dados_servicos.keys():
         if k not in ["Instalação do Padrão", "Projeto e ART"]:
             v_padrao = 25.0 if "Laje" in k else (20.0 if "Sobrepostas" in k else 30.0)
-            precos[k] = st.number_input(k, value=v_padrao)
+            precos[k] = st.number_input(f"Preço {k}", value=v_padrao)
     
-    precos["Instalação do Padrão"] = st.number_input("Instalação do Padrão (Base)", value=400.0)
-    precos["Projeto e ART"] = st.number_input("Projeto e ART (Base)", value=800.0)
+    precos["Instalação do Padrão"] = st.number_input("Preço Base Padrão", value=400.0)
+    precos["Projeto e ART"] = st.number_input("Preço Base Projeto/ART", value=800.0)
 
 tab1, tab2, tab_conf, tab3 = st.tabs(["📋 Serviços", "📦 Materiais", "🔍 Conferência", "📄 Gerar Orçamento"])
 
-# --- ABA 1: SERVIÇOS ---
+# --- ABA 1: SERVIÇOS (CORREÇÃO DE MEMÓRIA AQUI) ---
 with tab1:
     st.subheader("Configuração de Mão de Obra")
     escolha_serv = st.selectbox("Selecione o serviço para editar:", list(st.session_state.dados_servicos.keys()))
     
+    # IMPORTANTE: value=st.session_state.dados_servicos[escolha_serv] mantém o dado salvo ao trocar
     if escolha_serv in ["Pontos Altos de Força", "Pontos Baixos e Médios de Força", "Luminárias em Teto/Gesso/PVC", "Quadro de Disjuntores"]:
-        st.session_state.dados_servicos[escolha_serv] = st.number_input("Quantidade:", min_value=0, step=1, value=int(st.session_state.dados_servicos[escolha_serv]))
+        qtd_atual = int(st.session_state.dados_servicos[escolha_serv])
+        st.session_state.dados_servicos[escolha_serv] = st.number_input("Quantidade:", min_value=0, step=1, value=qtd_atual, key=f"input_{escolha_serv}")
+        
     elif escolha_serv in ["Perfil LED em Teto/Gesso/PVC", "Fiação de Distribuição", "Fiação do Padrão ao Quadro de Disjuntores", "Instalações sobre Laje/Telhados", "Instalação de Eletrodutos/Canaletas Sobrepostas"]:
-        st.session_state.dados_servicos[escolha_serv] = st.number_input("Metragem (m):", min_value=0.0, step=0.5, value=float(st.session_state.dados_servicos[escolha_serv]))
+        metragem_atual = float(st.session_state.dados_servicos[escolha_serv])
+        st.session_state.dados_servicos[escolha_serv] = st.number_input("Metragem (m):", min_value=0.0, step=0.5, value=metragem_atual, key=f"input_{escolha_serv}")
+        
     elif escolha_serv == "Instalação do Padrão":
         d = st.session_state.dados_servicos[escolha_serv]
         inc = st.checkbox("Incluir Padrão?", value=d["incluir"])
         tipo = st.selectbox("Fase:", ["Monofásico", "Bifásico", "Trifásico"], index=["Monofásico", "Bifásico", "Trifásico"].index(d["tipo"]))
         st.session_state.dados_servicos[escolha_serv] = {"incluir": inc, "tipo": tipo}
+        
     elif escolha_serv == "Projeto e ART":
         st.session_state.dados_servicos[escolha_serv] = st.checkbox("Incluir Projeto/ART?", value=st.session_state.dados_servicos[escolha_serv])
 
@@ -74,7 +80,7 @@ with tab2:
 
         elif categoria == "DISJUNTORES":
             c1, c2, c3, c4 = st.columns(4)
-            amperagens = [f"{a} A" for a in [2, 4, 6, 10, 16, 20, 25, 32, 40, 50, 63, 70, 80, 100, 125]]
+            amperagens = [f"{a} A" for a in]
             corr = c1.selectbox("Corrente:", amperagens)
             fase = c2.selectbox("Polos:", ["Unipolar", "Bipolar", "Tripolar"])
             curva = c3.selectbox("Curva:", ["B", "C", "D"], index=1)
@@ -98,10 +104,14 @@ with tab2:
 
         elif categoria == "CONDUÍTES" or categoria == "CONDULETES":
             c1, c2, c3 = st.columns(3)
-            bits = ['1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"', '2 1/2"', '3"', '4"']
-            sec = c1.selectbox("Bitola:", bits)
-            tipo_t = st.text_input("Tipo/Modelo:", key="in_t_tubo")
-            uni_f = "m" if categoria == "CONDUÍTES" else "un"
+            bitolas = ['1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"', '2 1/2"', '3"', '4"']
+            sec = c1.selectbox("Bitola:", bitolas, key="mat_bitola")
+            if categoria == "CONDUÍTES":
+                tipo_t = st.text_input("Tipo (ex: Corrugado):", key="in_t_tubo")
+                uni_f = "m"
+            else:
+                tipo_t = st.selectbox("Tipo:", ["C", "E", "X", "T", "LR", "LL", "LB", "TB", "B"], key="in_t_let")
+                uni_f = "un"
             qtd_f = c3.number_input("Quantidade:", min_value=0.0, key="in_q_tubo")
             nome_f = f"{categoria.title()[:-1]} {sec} {tipo_t}"
 
@@ -127,7 +137,6 @@ with tab_conf:
             st.session_state.lista_materiais = []
             st.rerun()
         
-        st.divider()
         for i, item in enumerate(st.session_state.lista_materiais):
             with st.container(border=True):
                 c1, c2, c3, c4 = st.columns([0.5, 0.15, 0.15, 0.2])
@@ -183,6 +192,5 @@ with tab3:
         doc.save(buf)
         return buf.getvalue()
 
-    # CORREÇÃO DO ERRO AQUI: lista_materiais (correto)
     if total_final_mo > 0 or len(st.session_state.lista_materiais) > 0:
         st.download_button("📥 Baixar Documento Completo", gerar_word(itens_orc, st.session_state.lista_materiais, total_final_mo), "orcamento_eletrico.docx", type="primary")
