@@ -32,7 +32,6 @@ with st.sidebar:
     precos = {}
     for k in st.session_state.dados_servicos.keys():
         if k not in ["Instalação do Padrão", "Projeto e ART"]:
-            # Valores base conforme solicitado anteriormente
             v_padrao = 25.0 if "Laje" in k else (20.0 if "Sobrepostas" in k else 30.0)
             precos[k] = st.number_input(k, value=v_padrao)
     
@@ -41,7 +40,7 @@ with st.sidebar:
 
 tab1, tab2, tab_conf, tab3 = st.tabs(["📋 Serviços", "📦 Materiais", "🔍 Conferência", "📄 Gerar Orçamento"])
 
-# --- ABA 1: SERVIÇOS (MÃO DE OBRA) ---
+# --- ABA 1: SERVIÇOS ---
 with tab1:
     st.subheader("Configuração de Mão de Obra")
     escolha_serv = st.selectbox("Selecione o serviço para editar:", list(st.session_state.dados_servicos.keys()))
@@ -58,7 +57,7 @@ with tab1:
     elif escolha_serv == "Projeto e ART":
         st.session_state.dados_servicos[escolha_serv] = st.checkbox("Incluir Projeto/ART?", value=st.session_state.dados_servicos[escolha_serv])
 
-# --- ABA 2: MATERIAIS (LANÇAMENTO POR CATEGORIA) ---
+# --- ABA 2: MATERIAIS ---
 with tab2:
     st.subheader("📦 Lançamento de Materiais")
     categoria = st.selectbox("Categoria:", ["CABOS", "DISJUNTORES", "MÓDULOS, TOMADAS E PLACAS", "CONDUÍTES", "CONDULETES", "OUTROS"])
@@ -85,7 +84,8 @@ with tab2:
         elif categoria == "MÓDULOS, TOMADAS E PLACAS":
             c1, c2, c3 = st.columns([0.3, 0.4, 0.3])
             tipo = c1.selectbox("Tipo:", ["Placa 4x2", "Placa 4x4", "Módulo Tomada", "Módulo Interruptor", "Three Way", "For Way"])
-            desc = c2.text_input("Descrição (ex: 3 postos / 20A):", key="in_desc_mod")
+            desc_opcoes = ["1 posto", "2 postos", "3 postos", "4 postos", "5 postos", "6 postos", "10 A", "20 A"]
+            desc = c2.selectbox("Descrição:", desc_opcoes)
             qtd_f = c3.number_input("Qtde:", min_value=0, step=1, key="in_q_mod")
             nome_f, uni_f = f"{tipo} {desc}", "pç"
 
@@ -111,13 +111,12 @@ with tab2:
         if st.button("➕ Adicionar à Lista"):
             if nome_f and qtd_f > 0:
                 st.session_state.lista_materiais.append({"nome": nome_f.strip(), "qtd": qtd_f, "uni": uni_f})
-                st.success(f"✓ {nome_f} adicionado com sucesso!")
-                # O Rerun é necessário para atualizar a aba de conferência
+                st.toast(f"✅ {nome_f} adicionado!") # Aviso que não desaparece com rerun
                 st.rerun()
             else:
-                st.warning("Informe a descrição e a quantidade.")
+                st.warning("Preencha os campos de descrição e quantidade.")
 
-# --- ABA 3: CONFERÊNCIA E EDIÇÃO ---
+# --- ABA 3: CONFERÊNCIA ---
 with tab_conf:
     st.subheader("🔍 Conferência e Edição Manual")
     if not st.session_state.lista_materiais:
@@ -138,12 +137,11 @@ with tab_conf:
                     st.session_state.lista_materiais.pop(i)
                     st.rerun()
 
-# --- ABA 4: GERAÇÃO DE DOCUMENTO ---
+# --- ABA 4: EXPORTAÇÃO ---
 with tab3:
     itens_orc, soma_mo = {}, 0.0
     for k, v in st.session_state.dados_servicos.items():
         if k == "Instalação do Padrão" and v["incluir"]:
-            # Regras de multiplicadores solicitadas anteriormente
             mult = {"Monofásico": 1.0, "Bifásico": 1.4, "Trifásico": 1.7}
             val = precos[k] * mult[v["tipo"]]
             itens_orc[k], soma_mo = val, soma_mo + val
@@ -152,7 +150,6 @@ with tab3:
             itens_orc[k], soma_mo = val, soma_mo + val
     
     if st.session_state.dados_servicos["Projeto e ART"]:
-        # ART = Fixo + 55% sobre os outros serviços
         itens_orc["Projeto e ART"] = precos["Projeto e ART"] + (soma_mo * 0.55)
     
     total_final_mo = sum(itens_orc.values())
