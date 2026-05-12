@@ -85,7 +85,6 @@ with tab2:
             c1, c2, c3 = st.columns([0.3, 0.4, 0.3])
             tipo = c1.selectbox("Tipo:", ["Placa 4x2", "Placa 4x4", "Módulo Tomada", "Módulo Interruptor"])
             
-            # Descrição Dinâmica
             if tipo == "Módulo Interruptor":
                 desc_opcoes = ["Simples", "Three Way", "Four Way", "Simples com Tomada"]
             elif tipo == "Módulo Tomada":
@@ -101,12 +100,8 @@ with tab2:
             c1, c2, c3 = st.columns(3)
             bits = ['1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"', '2 1/2"', '3"', '4"']
             sec = c1.selectbox("Bitola:", bits)
-            if categoria == "CONDUÍTES":
-                tipo_t = st.text_input("Tipo (ex: Corrugado):", key="in_t_cond")
-                uni_f = "m"
-            else:
-                tipo_t = st.selectbox("Tipo:", ["C", "E", "X", "T", "LR", "LL", "LB", "TB", "B"], key="in_t_let")
-                uni_f = "un"
+            tipo_t = st.text_input("Tipo/Modelo:", key="in_t_tubo")
+            uni_f = "m" if categoria == "CONDUÍTES" else "un"
             qtd_f = c3.number_input("Quantidade:", min_value=0.0, key="in_q_tubo")
             nome_f = f"{categoria.title()[:-1]} {sec} {tipo_t}"
 
@@ -163,9 +158,7 @@ with tab3:
 
     def gerar_word(orc, mats, tot_mo):
         doc = Document()
-        for s in doc.sections: 
-            s.top_margin = s.bottom_margin = s.left_margin = s.right_margin = Pt(72)
-        
+        for s in doc.sections: s.top_margin = s.bottom_margin = s.left_margin = s.right_margin = Pt(72)
         style = doc.styles['Normal']
         style.font.name, style.font.size, style.paragraph_format.line_spacing = 'Arial', Pt(12), 1.5
         style.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
@@ -190,5 +183,6 @@ with tab3:
         doc.save(buf)
         return buf.getvalue()
 
-    if total_final_mo > 0 or st.session_state.lista_materials:
-        st.download_button("📥 Baixar Documento Completo (.docx)", gerar_word(itens_orc, st.session_state.lista_materiais, total_final_mo), "orcamento_final.docx", type="primary")
+    # CORREÇÃO DO ERRO AQUI: lista_materiais (correto)
+    if total_final_mo > 0 or len(st.session_state.lista_materiais) > 0:
+        st.download_button("📥 Baixar Documento Completo", gerar_word(itens_orc, st.session_state.lista_materiais, total_final_mo), "orcamento_eletrico.docx", type="primary")
