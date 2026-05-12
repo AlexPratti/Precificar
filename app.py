@@ -40,12 +40,11 @@ with st.sidebar:
 
 tab1, tab2, tab_conf, tab3 = st.tabs(["📋 Serviços", "📦 Materiais", "🔍 Conferência", "📄 Gerar Orçamento"])
 
-# --- ABA 1: SERVIÇOS (CORREÇÃO DE MEMÓRIA AQUI) ---
+# --- ABA 1: SERVIÇOS ---
 with tab1:
     st.subheader("Configuração de Mão de Obra")
     escolha_serv = st.selectbox("Selecione o serviço para editar:", list(st.session_state.dados_servicos.keys()))
     
-    # IMPORTANTE: value=st.session_state.dados_servicos[escolha_serv] mantém o dado salvo ao trocar
     if escolha_serv in ["Pontos Altos de Força", "Pontos Baixos e Médios de Força", "Luminárias em Teto/Gesso/PVC", "Quadro de Disjuntores"]:
         qtd_atual = int(st.session_state.dados_servicos[escolha_serv])
         st.session_state.dados_servicos[escolha_serv] = st.number_input("Quantidade:", min_value=0, step=1, value=qtd_atual, key=f"input_{escolha_serv}")
@@ -80,7 +79,9 @@ with tab2:
 
         elif categoria == "DISJUNTORES":
             c1, c2, c3, c4 = st.columns(4)
-            amperagens = [f"{a} A" for a in]
+            # Lista de amperagens comerciais corrigida
+            amps_list = [2, 4, 6, 10, 16, 20, 25, 32, 40, 50, 63, 70, 80, 100, 125]
+            amperagens = [f"{a} A" for a in amps_list]
             corr = c1.selectbox("Corrente:", amperagens)
             fase = c2.selectbox("Polos:", ["Unipolar", "Bipolar", "Tripolar"])
             curva = c3.selectbox("Curva:", ["B", "C", "D"], index=1)
@@ -137,6 +138,7 @@ with tab_conf:
             st.session_state.lista_materiais = []
             st.rerun()
         
+        st.divider()
         for i, item in enumerate(st.session_state.lista_materiais):
             with st.container(border=True):
                 c1, c2, c3, c4 = st.columns([0.5, 0.15, 0.15, 0.2])
@@ -167,7 +169,9 @@ with tab3:
 
     def gerar_word(orc, mats, tot_mo):
         doc = Document()
-        for s in doc.sections: s.top_margin = s.bottom_margin = s.left_margin = s.right_margin = Pt(72)
+        for s in doc.sections: 
+            s.top_margin = s.bottom_margin = s.left_margin = s.right_margin = Pt(72)
+        
         style = doc.styles['Normal']
         style.font.name, style.font.size, style.paragraph_format.line_spacing = 'Arial', Pt(12), 1.5
         style.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
