@@ -36,7 +36,7 @@ with st.sidebar:
         "Pontos Altos de Força": 20.0,
         "Pontos Baixos e Médios de Força": 15.0,
         "Luminárias em Teto/Gesso/PVC": 35.0,
-        "Perfil LED em Teto/Gesso/PVC": 20.0,
+        "Perfil LED em Teto/Gesso/PVC": 25.0,
         "Fiação de Distribuição": 15.0,
         "Fiação do Padrão ao Quadro de Disjuntores": 25.0,
         "Instalações sobre Laje/Telhados": 10.0,
