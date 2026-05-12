@@ -30,14 +30,27 @@ def formatar_qtd(qtd, unidade):
 # --- SIDEBAR: PREÇOS MÃO DE OBRA ---
 with st.sidebar:
     st.header("⚙️ Preços Mão de Obra")
-    precos = {}
-    for k in st.session_state.dados_servicos.keys():
-        if k not in ["Instalação do Padrão", "Projeto e ART"]:
-            v_padrao = 25.0 if "Laje" in k else (20.0 if "Sobrepostas" in k else 30.0)
-            precos[k] = st.number_input(f"Valor Unitário: {k}", value=v_padrao, key=f"p_{k}")
     
-    precos["Instalação do Padrão"] = st.number_input("Preço Base Padrão", value=400.0)
-    precos["Projeto e ART"] = st.number_input("Preço Base Projeto/ART", value=800.0)
+    # EDITE OS VALORES ABAIXO PARA O SEU COMMIT:
+    precos_fixos = {
+        "Pontos Altos de Força": 80.0,
+        "Pontos Baixos e Médios de Força": 60.0,
+        "Luminárias em Teto/Gesso/PVC": 45.0,
+        "Perfil LED em Teto/Gesso/PVC": 120.0,
+        "Fiação de Distribuição": 15.0,
+        "Fiação do Padrão ao Quadro de Disjuntores": 25.0,
+        "Instalações sobre Laje/Telhados": 35.0,
+        "Instalação de Eletrodutos/Canaletas Sobrepostas": 30.0,
+        "Quadro de Disjuntores": 40.0,
+        "Instalação do Padrão": 500.0,
+        "Projeto e ART": 800.0
+    }
+
+    # Gerando os campos na sidebar automaticamente com base nos valores acima
+    precos = {}
+    for servico, valor_padrao in precos_fixos.items():
+        precos[servico] = st.number_input(f"Valor: {servico}", value=valor_padrao, key=f"p_{servico}")
+
 
 # --- ABAS ---
 tab_serv, tab_conf_serv, tab_mat, tab_conf_mat, tab_doc = st.tabs([
