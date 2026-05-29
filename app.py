@@ -170,11 +170,9 @@ with st.sidebar:
         opcoes_variantes = ["Quantidade", "Metros", "Kg", "Corrente (Amperagem)", "Polos", "Curva", "Seção", "Cor", "Bitola", "Descrição"]
         vars_selecionadas = st.multiselect("Marque quais deseja aplicar:", opcoes_variantes, key="multiselect_vars_mat")
         
-        payload_vars = {}
         partes_nome_mat = [nome_mat_base] if nome_mat_base else []
         custo_total_material = 0.0
         
-        # Gera os campos com valores logo à frente de cada variante marcada
         if vars_selecionadas:
             st.markdown("---")
             for v in vars_selecionadas:
@@ -192,7 +190,20 @@ with st.sidebar:
                     elif v == "Kg":
                         v_kg = c_label.number_input("Peso (Kg):", min_value=0.0, value=0.0, key="v_mat_kg")
                         v_val = c_val.number_input("Valor por Kg (R$):", min_value=0.0, value=0.0, key="v_mat_kg_val")
+                        if v_kg > 0: partes_nome_mat.append(f"{v_kg}kg")
+                        custo_total_material += (v_kg * v_val)
 # --- CONTINUAÇÃO DO CÓDIGO (PARTE 2 DE 2) ---
+
+def formatar_qtd(qtd, unidade):
+    if unidade.lower() == "m":
+        return f"{float(qtd):.1f}"
+    return f"{int(qtd)}"
+
+# --- ABAS PRINCIPAIS ---
+# Criação exata das variáveis das abas para corrigir o NameError
+tab_predial, tab_industrial, tab_conf_serv = st.tabs([
+    "🏢 Predial", "🏭 Industrial", "🔍 Conferência e Fechamento"
+])
 
 # --- ABA 1: PREDIAL (MÃO DE OBRA) ---
 with tab_predial:
@@ -323,7 +334,7 @@ with tab_conf_serv:
                         st.session_state.dados_servicos[servico] = 0.0
                     st.rerun()
 
-    # Processamento específico e fixo para Projetos/ART (Fixo + 55%)
+    # Processamento e regras da ART (Fixo + 55%)
     for servico, dado in st.session_state.dados_servicos.items():
         serv_info = next((s for s in servicos_db if s["nome"] == servico), None)
         if serv_info and serv_info["tipo_input"] == "art" and dado:
@@ -344,6 +355,12 @@ with tab_conf_serv:
     st.divider()
     st.markdown("### 📦 Materiais Lançados pela Barra Lateral")
     
+    if not st.session_state.lista_materials if 'lista_materials' in st.session_state else st.session_state.lista_materiais:
+        # Corrige dinamicamente qualquer lixo residual de sessões antigas
+        if 'lista_materials' in st.session_state and st.session_state.lista_materials:
+            st.session_state.lista_materiais = st.session_state.lista_materials
+            del st.session_state['lista_materials']
+            
     if not st.session_state.lista_materiais:
         st.info("Nenhum material adicionado através da barra lateral.")
     else:
@@ -353,8 +370,6 @@ with tab_conf_serv:
         for i, item in enumerate(st.session_state.lista_materiais):
             with st.container(border=True):
                 m1, m2, m3, m4 = st.columns([0.4, 0.2, 0.2, 0.2])
-                
-                # Permite edição em tempo real das descrições e contagens lançadas
                 st.session_state.lista_materiais[i]['nome'] = m1.text_input("Nome:", item['nome'], key=f"ed_aba_n_{i}", label_visibility="collapsed")
                 st.session_state.lista_materiais[i]['qtd'] = m2.number_input("Qtd:", value=float(item['qtd']), key=f"ed_aba_q_{i}", label_visibility="collapsed")
                 m3.write(f"R$ {item.get('preco_calculado', 0.0):.2f}")
@@ -367,16 +382,3 @@ with tab_conf_serv:
     st.divider()
     total_mo_calculado = sum(itens_orc.values())
     total_mats_calculado = sum([m.get("preco_calculado", 0.0) for m in st.session_state.lista_materiais])
-    valor_geral_proposta = total_mo_calculado + total_mats_calculado
-    
-    st.write(f"### Valor Total da Mão de Obra: R$ {total_mo_calculado:.2f}")
-    if total_mats_calculado > 0:
-        st.write(f"### Valor Total de Materiais Informados: R$ {total_mats_calculado:.2f}")
-    st.write(f"## 💰 Valor Geral da Proposta: R$ {valor_geral_proposta:.2f}")
-
-    def gerar_word_proposicao(orc, mats, tot):
-        doc = Document()
-        for s in doc.sections:
-            s.top_margin = s.bottom_margin = s.left_margin = s.right_margin = Pt(72)
-        style = doc.styles['Normal']
-        style.font.name, style.font.size, style.paragraph_format.line_spacing = 'Arial', Pt(12), 1.5
