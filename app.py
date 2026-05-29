@@ -363,3 +363,4 @@ with tab_mat:
         elif categoria in ["CONDUÍTES", "CONDULETES"]:
             c1, c2, c3 = st.columns(3)
             bits = ['1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"', '2 1/2"', '3"', '4"']
+            sec = c1.selectbox("Bitola:", bits)
