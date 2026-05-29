@@ -97,7 +97,7 @@ for s in servicos_db:
 if 'lista_materiais' not in st.session_state:
     st.session_state.lista_materiais = []
 
-# --- MAPEAMENTO GLOBAL DE PREÇOS ---
+# --- MAPA DE PREÇOS ANTI-KEYERROR ---
 precos = {}
 for s in servicos_db:
     precos[s["nome"]] = float(s["valor"])
@@ -145,7 +145,8 @@ with st.sidebar:
                     st.success("Serviço adicionado!")
                     time.sleep(0.4)
                     st.rerun()
-                else: st.error("Serviço já existe!")
+                else:
+                    st.error("Serviço já existe!")
                 
         servicos_deletaveis = [s for s in servicos_filtrados if s["deletavel"]]
         if servicos_deletaveis:
