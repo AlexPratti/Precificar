@@ -20,26 +20,20 @@ headers = {
 }
 
 # --- FUNÇÕES DE BANCO DE DADOS (SUPABASE REST API) ---
-def init_db():
-    """Cria as tabelas necessárias via RPC ou verifica consistência se houver suporte"""
-    # Como usamos a API REST direta, a criação inicial de tabelas complexas assume-se mapeada.
-    # Garantimos que as requisições rodem limpamente.
-    pass
-
 def supabase_get(tabela, params=None):
     try:
         url = f"{URL_SUPABASE}/rest/v1/{tabela}"
-        r = httpx.get(url, headers=headers, params=params)
-        if r.status_code in [200, 206]:
+        r = httpx.get(url, headers=headers, params=params, timeout=5.0)
+        if r.status_code == 200:
             return r.json()
-        return []
+        return None
     except Exception:
-        return []
+        return None
 
 def supabase_post(tabela, dado):
     try:
         url = f"{URL_SUPABASE}/rest/v1/{tabela}"
-        httpx.post(url, headers=headers, json=dado)
+        httpx.post(url, headers=headers, json=dado, timeout=5.0)
     except Exception:
         pass
 
@@ -48,53 +42,50 @@ def supabase_upsert(tabela, dados):
         url = f"{URL_SUPABASE}/rest/v1/{tabela}"
         headers_upsert = headers.copy()
         headers_upsert["Prefer"] = "resolution=merge-duplicates,return=representation"
-        httpx.post(url, headers=headers_upsert, json=dados)
+        httpx.post(url, headers=headers_upsert, json=dados, timeout=5.0)
     except Exception:
         pass
 
 def supabase_delete(tabela, filtros):
     try:
         url = f"{URL_SUPABASE}/rest/v1/{tabela}"
-        httpx.delete(url, headers=headers, params=filtros)
+        httpx.delete(url, headers=headers, params=filtros, timeout=5.0)
     except Exception:
         pass
 
-# --- POPULAR BANCO DE DADOS SE ESTIVER VAZIO ---
-def popular_servicos_padrao():
-    servicos_existentes = supabase_get("precif_servicos")
-    if not servicos_existentes:
-        padrao = [
-            {"nome": "Pontos Altos de Força", "tipo_categoria": "Predial", "valor": 20.0, "tipo_input": "quantidade", "deletavel": False},
-            {"nome": "Pontos Baixos e Médios de Força", "tipo_categoria": "Predial", "valor": 15.0, "tipo_input": "quantidade", "deletavel": False},
-            {"nome": "Luminárias em Teto/Gesso/PVC", "tipo_categoria": "Predial", "valor": 35.0, "tipo_input": "quantidade", "deletavel": False},
-            {"nome": "Perfil LED em Teto/Gesso/PVC", "tipo_categoria": "Predial", "valor": 25.0, "tipo_input": "metragem", "deletavel": False},
-            {"nome": "Fiação de Distribuição", "tipo_categoria": "Predial", "valor": 15.0, "tipo_input": "metragem", "deletavel": False},
-            {"nome": "Fiação do Padrão ao Quadro de Disjuntores", "tipo_categoria": "Predial", "valor": 25.0, "tipo_input": "metragem", "deletavel": False},
-            {"nome": "Instalações sobre Laje/Telhados", "tipo_categoria": "Predial", "valor": 10.0, "tipo_input": "metragem", "deletavel": False},
-            {"nome": "Instalação de Eletrodutos/Canaletas Sobrepostas", "tipo_categoria": "Predial", "valor": 15.0, "tipo_input": "metragem", "deletavel": False},
-            {"nome": "Quadro de Disjuntores", "tipo_categoria": "Predial", "valor": 15.0, "tipo_input": "quantidade", "deletavel": False},
-            {"nome": "Instalação do Padrão", "tipo_categoria": "Predial", "valor": 400.0, "tipo_input": "padrao", "deletavel": False},
-            {"nome": "Projeto e ART", "tipo_categoria": "Predial", "valor": 800.0, "tipo_input": "art", "deletavel": False},
-            # Industriais Iniciais
-            {"nome": "Parametrização de Soft Starter", "tipo_categoria": "Industrial", "valor": 150.0, "tipo_input": "quantidade", "deletavel": True},
-            {"nome": "Parametrização de Inversor", "tipo_categoria": "Industrial", "valor": 150.0, "tipo_input": "quantidade", "deletavel": True},
-            {"nome": "Instalação de Soft Starter", "tipo_categoria": "Industrial", "valor": 200.0, "tipo_input": "quantidade", "deletavel": True},
-            {"nome": "Instalação de Inversor", "tipo_categoria": "Industrial", "valor": 200.0, "tipo_input": "quantidade", "deletavel": True},
-            {"nome": "Montagem de Comandos", "tipo_categoria": "Industrial", "valor": 50.0, "tipo_input": "componentes", "deletavel": True}
-        ]
-        for p in padrao:
-            supabase_post("precif_servicos", p)
+# --- FALLBACK SE A TABELA NÃO EXISTIR NO BANCO AINDA ---
+servicos_padrao_local = [
+    {"nome": "Pontos Altos de Força", "tipo_categoria": "Predial", "valor": 20.0, "tipo_input": "quantidade", "deletavel": False},
+    {"nome": "Pontos Baixos e Médios de Força", "tipo_categoria": "Predial", "valor": 15.0, "tipo_input": "quantidade", "deletavel": False},
+    {"nome": "Luminárias em Teto/Gesso/PVC", "tipo_categoria": "Predial", "valor": 35.0, "tipo_input": "quantidade", "deletavel": False},
+    {"nome": "Perfil LED em Teto/Gesso/PVC", "tipo_categoria": "Predial", "valor": 25.0, "tipo_input": "metragem", "deletavel": False},
+    {"nome": "Fiação de Distribuição", "tipo_categoria": "Predial", "valor": 15.0, "tipo_input": "metragem", "deletavel": False},
+    {"nome": "Fiação do Padrão ao Quadro de Disjuntores", "tipo_categoria": "Predial", "valor": 25.0, "tipo_input": "metragem", "deletavel": False},
+    {"nome": "Instalações sobre Laje/Telhados", "tipo_categoria": "Predial", "valor": 10.0, "tipo_input": "metragem", "deletavel": False},
+    {"nome": "Instalação de Eletrodutos/Canaletas Sobrepostas", "tipo_categoria": "Predial", "valor": 15.0, "tipo_input": "metragem", "deletavel": False},
+    {"nome": "Quadro de Disjuntores", "tipo_categoria": "Predial", "valor": 15.0, "tipo_input": "quantidade", "deletavel": False},
+    {"nome": "Instalação do Padrão", "tipo_categoria": "Predial", "valor": 400.0, "tipo_input": "padrao", "deletavel": False},
+    {"nome": "Projeto e ART", "tipo_categoria": "Predial", "valor": 800.0, "tipo_input": "art", "deletavel": False},
+    {"nome": "Parametrização de Soft Starter", "tipo_categoria": "Industrial", "valor": 150.0, "tipo_input": "quantidade", "deletavel": True},
+    {"nome": "Parametrização de Inversor", "tipo_categoria": "Industrial", "valor": 150.0, "tipo_input": "quantidade", "deletavel": True},
+    {"nome": "Instalação de Soft Starter", "tipo_categoria": "Industrial", "valor": 200.0, "tipo_input": "quantidade", "deletavel": True},
+    {"nome": "Instalação de Inversor", "tipo_categoria": "Industrial", "valor": 200.0, "tipo_input": "quantidade", "deletavel": True},
+    {"nome": "Montagem de Comandos", "tipo_categoria": "Industrial", "valor": 50.0, "tipo_input": "componentes", "deletavel": True}
+]
 
-popular_servicos_padrao()
-
-# --- SINCRO DA SEÇÃO COM SUPABASE ---
+# Tenta ler do banco, se der erro ou vier vazio usa o plano B (memória local)
 servicos_db = supabase_get("precif_servicos")
+if servicos_db is None:
+    servicos_db = servicos_padrao_local
+elif len(servicos_db) == 0:
+    for p in servicos_padrao_local:
+        supabase_post("precif_servicos", p)
+    servicos_db = servicos_padrao_local
 
 # --- INICIALIZAÇÃO DO ESTADO ---
 if 'dados_servicos' not in st.session_state:
     st.session_state.dados_servicos = {}
 
-# Atualiza dinamicamente a estrutura de inputs baseado no banco de dados
 for s in servicos_db:
     if s["nome"] not in st.session_state.dados_servicos:
         if s["tipo_input"] == "padrao":
@@ -107,27 +98,23 @@ for s in servicos_db:
 if 'lista_materiais' not in st.session_state:
     st.session_state.lista_materials = []
 
-# --- FUNÇÕES AUXILIARES ---
+if "aba_atual" not in st.session_state:
+    st.session_state.aba_atual = "Predial"
+
 def formatar_qtd(qtd, unidade):
     if unidade.lower() == "m":
         return f"{float(qtd):.1f}"
     return f"{int(qtd)}"
 
-# --- CONTROLE DE ABA ATIVA VIA CONTROLLER DE CONTEXTO ---
-if "aba_atual" not in st.session_state:
-    st.session_state.aba_atual = "Predial"
-
 # --- SIDEBAR: PREÇOS MÃO DE OBRA ---
 with st.sidebar:
     st.header(f"⚙️ Preços Mão de Obra ({st.session_state.aba_atual})")
     
-    # Filtra os serviços com base na categoria da aba visualizada
     servicos_filtrados = [s for s in servicos_db if s["tipo_categoria"] == st.session_state.aba_atual]
     
     precos = {}
     valores_novos = {}
     
-    # Exibe inputs de edição de preço
     for s in servicos_filtrados:
         label_exibicao = s["nome"]
         if s["tipo_input"] == "componentes":
@@ -140,13 +127,11 @@ with st.sidebar:
         )
         precos[s["nome"]] = valores_novos[s["nome"]]
     
-    # Mapeia os preços globais para o motor de cálculos
     for s in servicos_db:
         if s["nome"] not in precos:
             precos[s["nome"]] = float(s["valor"])
 
-    # Botão para salvar alterações de preços no Supabase
-    if st.button("💾 Confirmar Novos Valores", type="primary", use_container_width=True):
+    if st.button("💾 Confirmar Novos Valores", type="primary", use_container_width=True, key="btn_confirmar_precos"):
         for s in servicos_filtrados:
             supabase_upsert("precif_servicos", {
                 "nome": s["nome"],
@@ -161,15 +146,13 @@ with st.sidebar:
         
     st.divider()
     
-    # Inserção de nova Mão de Obra
     st.subheader("➕ Nova Mão de Obra")
     novo_nome = st.text_input("Nome do Serviço:", key="add_nome_serv")
     novo_tipo_in = st.selectbox("Tipo de Cobrança:", ["quantidade", "metragem", "componentes"], key="add_tipo_serv")
     novo_valor = st.number_input("Valor Inicial (R$):", min_value=0.0, value=50.0, key="add_val_serv")
     
-    if st.button("Adicionar Serviço", use_container_width=True):
+    if st.button("Adicionar Serviço", use_container_width=True, key="btn_adicionar_serv"):
         if novo_nome.strip():
-            # Impede duplicados
             if not any(s['nome'].lower() == novo_nome.strip().lower() for s in servicos_db):
                 supabase_post("precif_servicos", {
                     "nome": novo_nome.strip(),
@@ -186,13 +169,12 @@ with st.sidebar:
         else:
             st.error("Insira um nome válido.")
 
-    # Exclusão de Mão de Obra Customizada
     servicos_deletaveis = [s for s in servicos_filtrados if s["deletavel"]]
     if servicos_deletaveis:
         st.divider()
         st.subheader("🗑️ Excluir Mão de Obra")
         serv_para_deletar = st.selectbox("Selecione para excluir:", [s["nome"] for s in servicos_deletaveis], key="sel_del_serv")
-        if st.button("Remover Serviço Definitivamente", type="secondary", use_container_width=True):
+        if st.button("Remover Serviço Definitivamente", type="secondary", use_container_width=True, key="btn_remover_serv"):
             supabase_delete("precif_servicos", {"nome": f"eq.{serv_para_deletar}"})
             if serv_para_deletar in st.session_state.dados_servicos:
                 st.session_state.dados_servicos.pop(serv_para_deletar)
@@ -207,7 +189,6 @@ tab_predial, tab_industrial, tab_conf_serv, tab_mat, tab_conf_mat, tab_doc = st.
 ])
 
 # --- CONTROLE DINÂMICO DE CONTEXTO DA SIDEBAR ---
-# Detecta qual aba está ativa e força o rerun se mudar para sincronizar a sidebar imediatamente
 with tab_predial:
     if st.session_state.aba_atual != "Predial":
         st.session_state.aba_atual = "Predial"
@@ -228,7 +209,6 @@ with tab_predial:
         escolha_serv = st.selectbox("Selecione o serviço predial para editar:", nomes_prediais, key="sel_predial")
         dados_serv_escolhido = next(s for s in servicos_prediais if s["nome"] == escolha_serv)
         
-        # Cria o input correto dependendo da configuração no Supabase
         if dados_serv_escolhido["tipo_input"] == "quantidade":
             st.session_state.dados_servicos[escolha_serv] = st.number_input(
                 "Quantidade:", min_value=0.0, step=1.0, 
@@ -296,7 +276,6 @@ with tab_conf_serv:
     col_h1, col_h2, col_h3, col_h4 = st.columns([0.4, 0.2, 0.2, 0.2])
     col_h1.write("**Serviço**"); col_h2.write("**Qtd/Fase**"); col_h3.write("**Subtotal**"); col_h4.write("**Ação**")
 
-    # Varre todos os serviços calculando conforme a regra de seu tipo de entrada
     for servico, dado in st.session_state.dados_servicos.items():
         serv_info = next((s for s in servicos_db if s["nome"] == servico), None)
         if not serv_info:
@@ -309,7 +288,7 @@ with tab_conf_serv:
                 v_item = precos[servico] * {"Monofásico": 1.0, "Bifásico": 1.4, "Trifásico": 1.7}[dado["tipo"]]
                 exibir, label = True, dado["tipo"]
         elif serv_info["tipo_input"] == "art":
-            continue  # Tratado de forma separada no final do loop
+            continue
         else:
             if dado > 0:
                 v_item = dado * precos[servico]
@@ -334,7 +313,6 @@ with tab_conf_serv:
                         st.session_state.dados_servicos[servico] = 0.0
                     st.rerun()
 
-    # Processamento e exibição da taxa do Projeto e ART se marcada
     for servico, dado in st.session_state.dados_servicos.items():
         serv_info = next((s for s in servicos_db if s["nome"] == servico), None)
         if serv_info and serv_info["tipo_input"] == "art" and dado:
@@ -354,10 +332,11 @@ with tab_conf_serv:
 with tab_mat:
     st.subheader("📦 Lançamento de Materiais")
     
-    # Coleta categorias estáticas e materiais personalizados salvos no Supabase
     lista_db_materiais = supabase_get("precif_materiais_base")
+    if lista_db_materiais is None:
+        lista_db_materiais = []
+        
     categorias_adicionais = sorted(list(set([m["categoria"] for m in lista_db_materiais])))
-    
     categorias_base = ["CABOS", "DISJUNTORES", "MÓDULOS, TOMADAS E PLACAS", "CONDUÍTES", "CONDULETES", "OUTROS"]
     todas_categorias = categorias_base + [c for c in categorias_adicionais if c not in categorias_base]
     
@@ -387,3 +366,9 @@ with tab_mat:
             tipo = c1.selectbox("Tipo:", ["Placa 4x2", "Placa 4x4", "Módulo Tomada", "Módulo Interruptor"])
             if tipo == "Módulo Interruptor":
                 desc_op = ["Simples", "Three Way", "Four Way", "Simples com Tomada"]
+            elif tipo == "Módulo Tomada":
+                desc_op = ["10 A", "20 A", "USB", "RJ45", "TV"]
+            else:
+                desc_op = ["Cega", "1 posto", "2 postos", "3 postos", "4 postos", "6 postos"]
+            desc = c2.selectbox("Descrição:", desc_op)
+            qtd_f = c3.number_input("Qtde:", min_value=0, step=1, key="in_q_mod")
