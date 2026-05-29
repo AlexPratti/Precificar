@@ -252,7 +252,7 @@ with tab_conf_serv:
             serv_info = next((s for s in servicos_db if s["nome"] == k), None)
             if serv_info and serv_info["tipo_input"] == "padrao":
                 st.session_state.dados_servicos[k] = {"incluir": False, "tipo": "Monofásico"}
-            elif serv_info hallucinations and serv_info["tipo_input"] == "art":
+            elif serv_info and serv_info["tipo_input"] == "art":
                 st.session_state.dados_servicos[k] = False
             else:
                 st.session_state.dados_servicos[k] = 0.0
