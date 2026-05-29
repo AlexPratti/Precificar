@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit st
 import httpx
 from docx import Document
 from docx.shared import Pt
@@ -97,13 +97,17 @@ for s in servicos_db:
 if 'lista_materiais' not in st.session_state:
     st.session_state.lista_materiais = []
 
+# --- CORREÇÃO CRÍTICA DO KEYERROR ---
+# Mapeia os preços de TODOS os serviços do banco globalmente no início para evitar falhas
+precos = {}
+for s in servicos_db:
+    precos[s["nome"]] = float(s["valor"])
+
 # --- SIDEBAR REESTRUTURADA ---
 with st.sidebar:
     st.header("⚙️ Painel de Controle Global")
     modo_config = st.radio("Selecione o que deseja gerenciar:", ["Predial", "Industrial", "Material"], key="radio_modo_global")
     st.divider()
-
-    precos = {}
     
     if modo_config in ["Predial", "Industrial"]:
         st.subheader(f"Mão de Obra - {modo_config}")
@@ -112,14 +116,11 @@ with st.sidebar:
         
         for s in servicos_filtrados:
             valores_novos[s["nome"]] = st.number_input(
-                f"Valor: {s['nome']}", value=float(s["valor"]), key=f"p_{s['nome']}"
+                f"Valor: {s['nome']}", value=float(s["valor"]), key=f"p_input_{s['nome']}"
             )
+            # Atualiza dinamicamente o mapa global conforme digitação
             precos[s["nome"]] = valores_novos[s["nome"]]
             
-        for s in servicos_db:
-            if s["nome"] not in precos:
-                precos[s["nome"]] = float(s["valor"])
-
         if st.button("💾 Confirmar Novos Valores M.O.", type="primary", use_container_width=True):
             for s in servicos_filtrados:
                 supabase_upsert("precif_servicos", {
@@ -190,8 +191,6 @@ with st.sidebar:
                     elif v == "Kg":
                         v_kg = c_label.number_input("Peso (Kg):", min_value=0.0, value=0.0, key="v_mat_kg")
                         v_val = c_val.number_input("Valor por Kg (R$):", min_value=0.0, value=0.0, key="v_mat_kg_val")
-                        if v_kg > 0: partes_nome_mat.append(f"{v_kg}kg")
-                        custo_total_material += (v_kg * v_val)
 # --- CONTINUAÇÃO DO CÓDIGO (PARTE 2 DE 2) ---
 
 def formatar_qtd(qtd, unidade):
@@ -200,7 +199,6 @@ def formatar_qtd(qtd, unidade):
     return f"{int(qtd)}"
 
 # --- ABAS PRINCIPAIS ---
-# Criação exata das variáveis das abas para corrigir o NameError
 tab_predial, tab_industrial, tab_conf_serv = st.tabs([
     "🏢 Predial", "🏭 Industrial", "🔍 Conferência e Fechamento"
 ])
@@ -334,7 +332,7 @@ with tab_conf_serv:
                         st.session_state.dados_servicos[servico] = 0.0
                     st.rerun()
 
-    # Processamento e regras da ART (Fixo + 55%)
+    # Processamento específico para Projetos/ART (Fixo + 55%)
     for servico, dado in st.session_state.dados_servicos.items():
         serv_info = next((s for s in servicos_db if s["nome"] == servico), None)
         if serv_info and serv_info["tipo_input"] == "art" and dado:
@@ -355,12 +353,6 @@ with tab_conf_serv:
     st.divider()
     st.markdown("### 📦 Materiais Lançados pela Barra Lateral")
     
-    if not st.session_state.lista_materials if 'lista_materials' in st.session_state else st.session_state.lista_materiais:
-        # Corrige dinamicamente qualquer lixo residual de sessões antigas
-        if 'lista_materials' in st.session_state and st.session_state.lista_materials:
-            st.session_state.lista_materiais = st.session_state.lista_materials
-            del st.session_state['lista_materials']
-            
     if not st.session_state.lista_materiais:
         st.info("Nenhum material adicionado através da barra lateral.")
     else:
@@ -382,3 +374,13 @@ with tab_conf_serv:
     st.divider()
     total_mo_calculado = sum(itens_orc.values())
     total_mats_calculado = sum([m.get("preco_calculado", 0.0) for m in st.session_state.lista_materiais])
+    valor_geral_proposta = total_mo_calculado + total_mats_calculado
+    
+    st.write(f"### Valor Total da Mão de Obra: R$ {total_mo_calculado:.2f}")
+    if total_mats_calculado > 0:
+        st.write(f"### Valor Total de Materiais Informados: R$ {total_mats_calculado:.2f}")
+    st.write(f"## 💰 Valor Geral da Proposta: R$ {valor_geral_proposta:.2f}")
+
+    def gerar_word_proposicao(orc, mats, tot):
+        doc = Document()
+        for s in doc.sections:
