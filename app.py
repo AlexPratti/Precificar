@@ -330,15 +330,17 @@ with tab_mat:
     
     nome_f, uni_f, qtd_f = "", "un", 0.0
     
-    with st.container(border=True):
-        if categoria == "CABOS":
+    # Cada bloco condicional abre e fecha o seu próprio st.container de forma 100% segura
+    if categoria == "CABOS":
+        with st.container(border=True):
             c1, c2, c3 = st.columns(3)
             sec = c1.selectbox("Seção:", ["1,0 mm²", "1,5 mm²", "2,5 mm²", "4,0 mm²", "6,0 mm²", "10 mm²", "16 mm²", "25 mm²", "35 mm²"])
             cor = c2.selectbox("Cor:", ["azul", "preto", "branco", "vermelho", "amarelo", "verde", "verde e amarelo", "cinza", "marrom"])
             qtd_f = c3.number_input("Metros:", min_value=0.0, step=1.0, key="in_q_cabo")
             nome_f, uni_f = f"Cabo Flexível {sec} {cor}", "m"
 
-        elif categoria == "DISJUNTORES":
+    elif categoria == "DISJUNTORES":
+        with st.container(border=True):
             c1, c2, c3, c4 = st.columns(4)
             amps = [2, 4, 6, 10, 16, 20, 25, 32, 40, 50, 63, 70, 80, 100, 125]
             corr = c1.selectbox("Corrente:", [f"{a} A" for a in amps])
@@ -347,7 +349,8 @@ with tab_mat:
             qtd_f = c4.number_input("Qtde:", min_value=0, step=1, key="in_q_disj")
             nome_f, uni_f = f"Disjuntor {fase} {curva}{corr.replace(' A', '')}", "un"
 
-        elif categoria == "MÓDULOS, TOMADAS E PLACAS":
+    elif categoria == "MÓDULOS, TOMADAS E PLACAS":
+        with st.container(border=True):
             c1, c2, c3 = st.columns([0.3, 0.4, 0.3])
             tipo = c1.selectbox("Tipo:", ["Placa 4x2", "Placa 4x4", "Módulo Tomada", "Módulo Interruptor"])
             if tipo == "Módulo Interruptor":
@@ -360,7 +363,5 @@ with tab_mat:
             qtd_f = c3.number_input("Qtde:", min_value=0, step=1, key="in_q_mod")
             nome_f, uni_f = f"{tipo} {desc}", "pç"
 
-        elif categoria in ["CONDUÍTES", "CONDULETES"]:
-            c1, c2, c3 = st.columns(3)
-            bits = ['1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"', '2 1/2"', '3"', '4"']
-            sec = c1.selectbox("Bitola:", bits)
+    elif categoria in ["CONDUÍTES", "CONDULETES"]:
+        with st.container(border=True):
