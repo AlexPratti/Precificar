@@ -1,4 +1,5 @@
 import streamlit as st
+import httpx
 from docx import Document
 from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -7,19 +8,104 @@ import time
 
 st.set_page_config(page_title="Sistema Elétrico Profissional", layout="wide")
 
+# --- CONFIGURAÇÃO SUPABASE VIA SECRETS ---
+URL_SUPABASE = st.secrets["URL_SUPABASE"]
+KEY_SUPABASE = st.secrets["KEY_SUPABASE"]
+
+headers = {
+    "apikey": KEY_SUPABASE,
+    "Authorization": f"Bearer {KEY_SUPABASE}",
+    "Content-Type": "application/json",
+    "Prefer": "return=representation"
+}
+
+# --- FUNÇÕES DE BANCO DE DADOS (SUPABASE REST API) ---
+def init_db():
+    """Cria as tabelas necessárias via RPC ou verifica consistência se houver suporte"""
+    # Como usamos a API REST direta, a criação inicial de tabelas complexas assume-se mapeada.
+    # Garantimos que as requisições rodem limpamente.
+    pass
+
+def supabase_get(tabela, params=None):
+    try:
+        url = f"{URL_SUPABASE}/rest/v1/{tabela}"
+        r = httpx.get(url, headers=headers, params=params)
+        if r.status_code in [200, 206]:
+            return r.json()
+        return []
+    except Exception:
+        return []
+
+def supabase_post(tabela, dado):
+    try:
+        url = f"{URL_SUPABASE}/rest/v1/{tabela}"
+        httpx.post(url, headers=headers, json=dado)
+    except Exception:
+        pass
+
+def supabase_upsert(tabela, dados):
+    try:
+        url = f"{URL_SUPABASE}/rest/v1/{tabela}"
+        headers_upsert = headers.copy()
+        headers_upsert["Prefer"] = "resolution=merge-duplicates,return=representation"
+        httpx.post(url, headers=headers_upsert, json=dados)
+    except Exception:
+        pass
+
+def supabase_delete(tabela, filtros):
+    try:
+        url = f"{URL_SUPABASE}/rest/v1/{tabela}"
+        httpx.delete(url, headers=headers, params=filtros)
+    except Exception:
+        pass
+
+# --- POPULAR BANCO DE DADOS SE ESTIVER VAZIO ---
+def popular_servicos_padrao():
+    servicos_existentes = supabase_get("precif_servicos")
+    if not servicos_existentes:
+        padrao = [
+            {"nome": "Pontos Altos de Força", "tipo_categoria": "Predial", "valor": 20.0, "tipo_input": "quantidade", "deletavel": False},
+            {"nome": "Pontos Baixos e Médios de Força", "tipo_categoria": "Predial", "valor": 15.0, "tipo_input": "quantidade", "deletavel": False},
+            {"nome": "Luminárias em Teto/Gesso/PVC", "tipo_categoria": "Predial", "valor": 35.0, "tipo_input": "quantidade", "deletavel": False},
+            {"nome": "Perfil LED em Teto/Gesso/PVC", "tipo_categoria": "Predial", "valor": 25.0, "tipo_input": "metragem", "deletavel": False},
+            {"nome": "Fiação de Distribuição", "tipo_categoria": "Predial", "valor": 15.0, "tipo_input": "metragem", "deletavel": False},
+            {"nome": "Fiação do Padrão ao Quadro de Disjuntores", "tipo_categoria": "Predial", "valor": 25.0, "tipo_input": "metragem", "deletavel": False},
+            {"nome": "Instalações sobre Laje/Telhados", "tipo_categoria": "Predial", "valor": 10.0, "tipo_input": "metragem", "deletavel": False},
+            {"nome": "Instalação de Eletrodutos/Canaletas Sobrepostas", "tipo_categoria": "Predial", "valor": 15.0, "tipo_input": "metragem", "deletavel": False},
+            {"nome": "Quadro de Disjuntores", "tipo_categoria": "Predial", "valor": 15.0, "tipo_input": "quantidade", "deletavel": False},
+            {"nome": "Instalação do Padrão", "tipo_categoria": "Predial", "valor": 400.0, "tipo_input": "padrao", "deletavel": False},
+            {"nome": "Projeto e ART", "tipo_categoria": "Predial", "valor": 800.0, "tipo_input": "art", "deletavel": False},
+            # Industriais Iniciais
+            {"nome": "Parametrização de Soft Starter", "tipo_categoria": "Industrial", "valor": 150.0, "tipo_input": "quantidade", "deletavel": True},
+            {"nome": "Parametrização de Inversor", "tipo_categoria": "Industrial", "valor": 150.0, "tipo_input": "quantidade", "deletavel": True},
+            {"nome": "Instalação de Soft Starter", "tipo_categoria": "Industrial", "valor": 200.0, "tipo_input": "quantidade", "deletavel": True},
+            {"nome": "Instalação de Inversor", "tipo_categoria": "Industrial", "valor": 200.0, "tipo_input": "quantidade", "deletavel": True},
+            {"nome": "Montagem de Comandos", "tipo_categoria": "Industrial", "valor": 50.0, "tipo_input": "componentes", "deletavel": True}
+        ]
+        for p in padrao:
+            supabase_post("precif_servicos", p)
+
+popular_servicos_padrao()
+
+# --- SINCRO DA SEÇÃO COM SUPABASE ---
+servicos_db = supabase_get("precif_servicos")
+
 # --- INICIALIZAÇÃO DO ESTADO ---
 if 'dados_servicos' not in st.session_state:
-    st.session_state.dados_servicos = {
-        "Pontos Altos de Força": 0.0, "Pontos Baixos e Médios de Força": 0.0,
-        "Luminárias em Teto/Gesso/PVC": 0.0, "Perfil LED em Teto/Gesso/PVC": 0.0,
-        "Fiação de Distribuição": 0.0, "Fiação do Padrão ao Quadro de Disjuntores": 0.0,
-        "Instalações sobre Laje/Telhados": 0.0, "Instalação de Eletrodutos/Canaletas Sobrepostas": 0.0,
-        "Quadro de Disjuntores": 0.0, "Instalação do Padrão": {"incluir": False, "tipo": "Monofásico"},
-        "Projeto e ART": False
-    }
+    st.session_state.dados_servicos = {}
+
+# Atualiza dinamicamente a estrutura de inputs baseado no banco de dados
+for s in servicos_db:
+    if s["nome"] not in st.session_state.dados_servicos:
+        if s["tipo_input"] == "padrao":
+            st.session_state.dados_servicos[s["nome"]] = {"incluir": False, "tipo": "Monofásico"}
+        elif s["tipo_input"] == "art":
+            st.session_state.dados_servicos[s["nome"]] = False
+        else:
+            st.session_state.dados_servicos[s["nome"]] = 0.0
 
 if 'lista_materiais' not in st.session_state:
-    st.session_state.lista_materiais = []
+    st.session_state.lista_materials = []
 
 # --- FUNÇÕES AUXILIARES ---
 def formatar_qtd(qtd, unidade):
@@ -27,81 +113,213 @@ def formatar_qtd(qtd, unidade):
         return f"{float(qtd):.1f}"
     return f"{int(qtd)}"
 
+# --- CONTROLE DE ABA ATIVA VIA CONTROLLER DE CONTEXTO ---
+if "aba_atual" not in st.session_state:
+    st.session_state.aba_atual = "Predial"
+
 # --- SIDEBAR: PREÇOS MÃO DE OBRA ---
 with st.sidebar:
-    st.header("⚙️ Preços Mão de Obra")
+    st.header(f"⚙️ Preços Mão de Obra ({st.session_state.aba_atual})")
     
-    # EDITE OS VALORES ABAIXO PARA O SEU COMMIT:
-    precos_fixos = {
-        "Pontos Altos de Força": 20.0,
-        "Pontos Baixos e Médios de Força": 15.0,
-        "Luminárias em Teto/Gesso/PVC": 35.0,
-        "Perfil LED em Teto/Gesso/PVC": 25.0,
-        "Fiação de Distribuição": 15.0,
-        "Fiação do Padrão ao Quadro de Disjuntores": 25.0,
-        "Instalações sobre Laje/Telhados": 10.0,
-        "Instalação de Eletrodutos/Canaletas Sobrepostas": 15.0,
-        "Quadro de Disjuntores": 15.0,
-        "Instalação do Padrão": 400.0,
-        "Projeto e ART": 800.0
-    }
-
-    # Gerando os campos na sidebar automaticamente com base nos valores acima
+    # Filtra os serviços com base na categoria da aba visualizada
+    servicos_filtrados = [s for s in servicos_db if s["tipo_categoria"] == st.session_state.aba_atual]
+    
     precos = {}
-    for servico, valor_padrao in precos_fixos.items():
-        precos[servico] = st.number_input(f"Valor: {servico}", value=valor_padrao, key=f"p_{servico}")
+    valores_novos = {}
+    
+    # Exibe inputs de edição de preço
+    for s in servicos_filtrados:
+        label_exibicao = s["nome"]
+        if s["tipo_input"] == "componentes":
+            label_exibicao = f"{s['nome']} (por Componente)"
+        
+        valores_novos[s["nome"]] = st.number_input(
+            f"Valor: {label_exibicao}", 
+            value=float(s["valor"]), 
+            key=f"p_{s['nome']}"
+        )
+        precos[s["nome"]] = valores_novos[s["nome"]]
+    
+    # Mapeia os preços globais para o motor de cálculos
+    for s in servicos_db:
+        if s["nome"] not in precos:
+            precos[s["nome"]] = float(s["valor"])
 
+    # Botão para salvar alterações de preços no Supabase
+    if st.button("💾 Confirmar Novos Valores", type="primary", use_container_width=True):
+        for s in servicos_filtrados:
+            supabase_upsert("precif_servicos", {
+                "nome": s["nome"],
+                "tipo_categoria": s["tipo_categoria"],
+                "valor": valores_novos[s["nome"]],
+                "tipo_input": s["tipo_input"],
+                "deletavel": s["deletavel"]
+            })
+        st.success("Preços atualizados com sucesso!")
+        time.sleep(0.8)
+        st.rerun()
+        
+    st.divider()
+    
+    # Inserção de nova Mão de Obra
+    st.subheader("➕ Nova Mão de Obra")
+    novo_nome = st.text_input("Nome do Serviço:", key="add_nome_serv")
+    novo_tipo_in = st.selectbox("Tipo de Cobrança:", ["quantidade", "metragem", "componentes"], key="add_tipo_serv")
+    novo_valor = st.number_input("Valor Inicial (R$):", min_value=0.0, value=50.0, key="add_val_serv")
+    
+    if st.button("Adicionar Serviço", use_container_width=True):
+        if novo_nome.strip():
+            # Impede duplicados
+            if not any(s['nome'].lower() == novo_nome.strip().lower() for s in servicos_db):
+                supabase_post("precif_servicos", {
+                    "nome": novo_nome.strip(),
+                    "tipo_categoria": st.session_state.aba_atual,
+                    "valor": novo_valor,
+                    "tipo_input": novo_tipo_in,
+                    "deletavel": True
+                })
+                st.success("Serviço adicionado!")
+                time.sleep(0.8)
+                st.rerun()
+            else:
+                st.error("Este serviço já existe!")
+        else:
+            st.error("Insira um nome válido.")
 
-# --- ABAS ---
-tab_serv, tab_conf_serv, tab_mat, tab_conf_mat, tab_doc = st.tabs([
-    "📋 Serviços", "🔍 Conferência Serviços", "📦 Materiais", "🔍 Conferência Materiais", "📄 Gerar Orçamento"
+    # Exclusão de Mão de Obra Customizada
+    servicos_deletaveis = [s for s in servicos_filtrados if s["deletavel"]]
+    if servicos_deletaveis:
+        st.divider()
+        st.subheader("🗑️ Excluir Mão de Obra")
+        serv_para_deletar = st.selectbox("Selecione para excluir:", [s["nome"] for s in servicos_deletaveis], key="sel_del_serv")
+        if st.button("Remover Serviço Definitivamente", type="secondary", use_container_width=True):
+            supabase_delete("precif_servicos", {"nome": f"eq.{serv_para_deletar}"})
+            if serv_para_deletar in st.session_state.dados_servicos:
+                st.session_state.dados_servicos.pop(serv_para_deletar)
+            st.success("Serviço removido!")
+            time.sleep(0.8)
+            st.rerun()
+# --- CONTINUAÇÃO DO CÓDIGO (PARTE 2 DE 2) ---
+
+# --- CONFIGURAÇÃO E MAPEAMENTO DAS ABAS PRINCIPAIS ---
+tab_predial, tab_industrial, tab_conf_serv, tab_mat, tab_conf_mat, tab_doc = st.tabs([
+    "🏢 Predial", "🏭 Industrial", "🔍 Conferência Serviços", "📦 Materiais", "🔍 Conferência Materiais", "📄 Gerar Orçamento"
 ])
 
-# --- ABA 1: SERVIÇOS (LANÇAMENTO) ---
-with tab_serv:
-    st.subheader("Lançamento de Mão de Obra")
-    escolha_serv = st.selectbox("Selecione o serviço para editar:", list(st.session_state.dados_servicos.keys()))
-    
-    if escolha_serv in ["Pontos Altos de Força", "Pontos Baixos e Médios de Força", "Luminárias em Teto/Gesso/PVC", "Quadro de Disjuntores"]:
-        st.session_state.dados_servicos[escolha_serv] = st.number_input("Quantidade:", min_value=0.0, step=1.0, value=float(st.session_state.dados_servicos[escolha_serv]), key=f"in_{escolha_serv}")
-    elif escolha_serv in ["Perfil LED em Teto/Gesso/PVC", "Fiação de Distribuição", "Fiação do Padrão ao Quadro de Disjuntores", "Instalações sobre Laje/Telhados", "Instalação de Eletrodutos/Canaletas Sobrepostas"]:
-        st.session_state.dados_servicos[escolha_serv] = st.number_input("Metragem (m):", min_value=0.0, step=0.5, value=float(st.session_state.dados_servicos[escolha_serv]), key=f"in_{escolha_serv}")
-    elif escolha_serv == "Instalação do Padrão":
-        d = st.session_state.dados_servicos[escolha_serv]
-        inc = st.checkbox("Incluir Padrão?", value=d["incluir"])
-        tipo = st.selectbox("Fase:", ["Monofásico", "Bifásico", "Trifásico"], index=["Monofásico", "Bifásico", "Trifásico"].index(d["tipo"]))
-        st.session_state.dados_servicos[escolha_serv] = {"incluir": inc, "tipo": tipo}
-    elif escolha_serv == "Projeto e ART":
-        st.session_state.dados_servicos[escolha_serv] = st.checkbox("Incluir Projeto/ART?", value=st.session_state.dados_servicos[escolha_serv])
+# --- CONTROLE DINÂMICO DE CONTEXTO DA SIDEBAR ---
+# Detecta qual aba está ativa e força o rerun se mudar para sincronizar a sidebar imediatamente
+with tab_predial:
+    if st.session_state.aba_atual != "Predial":
+        st.session_state.aba_atual = "Predial"
+        st.rerun()
 
-# --- ABA 2: CONFERÊNCIA SERVIÇOS ---
+with tab_industrial:
+    if st.session_state.aba_atual != "Industrial":
+        st.session_state.aba_atual = "Industrial"
+        st.rerun()
+
+# --- ABA: PREDIAL (MÃO DE OBRA) ---
+with tab_predial:
+    st.subheader("Lançamento de Mão de Obra - Predial")
+    servicos_prediais = [s for s in servicos_db if s["tipo_categoria"] == "Predial"]
+    nomes_prediais = [s["nome"] for s in servicos_prediais]
+    
+    if nomes_prediais:
+        escolha_serv = st.selectbox("Selecione o serviço predial para editar:", nomes_prediais, key="sel_predial")
+        dados_serv_escolhido = next(s for s in servicos_prediais if s["nome"] == escolha_serv)
+        
+        # Cria o input correto dependendo da configuração no Supabase
+        if dados_serv_escolhido["tipo_input"] == "quantidade":
+            st.session_state.dados_servicos[escolha_serv] = st.number_input(
+                "Quantidade:", min_value=0.0, step=1.0, 
+                value=float(st.session_state.dados_servicos.get(escolha_serv, 0.0)), key=f"in_pr_{escolha_serv}"
+            )
+        elif dados_serv_escolhido["tipo_input"] == "metragem":
+            st.session_state.dados_servicos[escolha_serv] = st.number_input(
+                "Metragem (m):", min_value=0.0, step=0.5, 
+                value=float(st.session_state.dados_servicos.get(escolha_serv, 0.0)), key=f"in_pr_{escolha_serv}"
+            )
+        elif dados_serv_escolhido["tipo_input"] == "padrao":
+            d = st.session_state.dados_servicos.get(escolha_serv, {"incluir": False, "tipo": "Monofásico"})
+            inc = st.checkbox("Incluir Padrão?", value=d["incluir"], key="chk_padrao_pr")
+            tipo = st.selectbox("Fase:", ["Monofásico", "Bifásico", "Trifásico"], index=["Monofásico", "Bifásico", "Trifásico"].index(d["tipo"]), key="sel_fase_pr")
+            st.session_state.dados_servicos[escolha_serv] = {"incluir": inc, "tipo": tipo}
+        elif dados_serv_escolhido["tipo_input"] == "art":
+            st.session_state.dados_servicos[escolha_serv] = st.checkbox(
+                "Incluir Projeto/ART?", value=bool(st.session_state.dados_servicos.get(escolha_serv, False)), key="chk_art_pr"
+            )
+    else:
+        st.info("Nenhum serviço predial cadastrado.")
+
+# --- ABA: INDUSTRIAL (MÃO DE OBRA) ---
+with tab_industrial:
+    st.subheader("Lançamento de Mão de Obra - Industrial")
+    servicos_industriais = [s for s in servicos_db if s["tipo_categoria"] == "Industrial"]
+    nomes_industriais = [s["nome"] for s in servicos_industriais]
+    
+    if nomes_industriais:
+        escolha_serv_ind = st.selectbox("Selecione o serviço industrial para editar:", nomes_industriais, key="sel_ind")
+        dados_serv_ind_escolhido = next(s for s in servicos_industriais if s["nome"] == escolha_serv_ind)
+        
+        if dados_serv_ind_escolhido["tipo_input"] in ["quantidade", "componentes"]:
+            label_input = "Quantidade de Componentes:" if dados_serv_ind_escolhido["tipo_input"] == "componentes" else "Quantidade:"
+            st.session_state.dados_servicos[escolha_serv_ind] = st.number_input(
+                label_input, min_value=0.0, step=1.0, 
+                value=float(st.session_state.dados_servicos.get(escolha_serv_ind, 0.0)), key=f"in_ind_{escolha_serv_ind}"
+            )
+        elif dados_serv_ind_escolhido["tipo_input"] == "metragem":
+            st.session_state.dados_servicos[escolha_serv_ind] = st.number_input(
+                "Metragem (m):", min_value=0.0, step=0.5, 
+                value=float(st.session_state.dados_servicos.get(escolha_serv_ind, 0.0)), key=f"in_ind_{escolha_serv_ind}"
+            )
+    else:
+        st.info("Nenhum serviço industrial cadastrado.")
+
+# --- ABA: CONFERÊNCIA DE SERVIÇOS ---
 with tab_conf_serv:
     st.subheader("🔍 Revisão de Serviços Lançados")
     soma_base_para_art = 0.0
     servicos_ativos = False
     
-    if st.button("🚨 Zerar Todos os Serviços"):
+    if st.button("🚨 Zerar Todos os Serviços", key="btn_zerar_serv"):
         for k in st.session_state.dados_servicos.keys():
-            if k == "Instalação do Padrão": st.session_state.dados_servicos[k] = {"incluir": False, "tipo": "Monofásico"}
-            elif k == "Projeto e ART": st.session_state.dados_servicos[k] = False
-            else: st.session_state.dados_servicos[k] = 0.0
+            serv_info = next((s for s in servicos_db if s["nome"] == k), None)
+            if serv_info and serv_info["tipo_input"] == "padrao":
+                st.session_state.dados_servicos[k] = {"incluir": False, "tipo": "Monofásico"}
+            elif serv_info and serv_info["tipo_input"] == "art":
+                st.session_state.dados_servicos[k] = False
+            else:
+                st.session_state.dados_servicos[k] = 0.0
         st.rerun()
     
     st.divider()
     col_h1, col_h2, col_h3, col_h4 = st.columns([0.4, 0.2, 0.2, 0.2])
     col_h1.write("**Serviço**"); col_h2.write("**Qtd/Fase**"); col_h3.write("**Subtotal**"); col_h4.write("**Ação**")
 
+    # Varre todos os serviços calculando conforme a regra de seu tipo de entrada
     for servico, dado in st.session_state.dados_servicos.items():
+        serv_info = next((s for s in servicos_db if s["nome"] == servico), None)
+        if not serv_info:
+            continue
+            
         v_item, exibir, label = 0.0, False, ""
-        if servico == "Instalação do Padrão":
+        
+        if serv_info["tipo_input"] == "padrao":
             if dado["incluir"]:
                 v_item = precos[servico] * {"Monofásico": 1.0, "Bifásico": 1.4, "Trifásico": 1.7}[dado["tipo"]]
                 exibir, label = True, dado["tipo"]
-        elif servico == "Projeto e ART": continue
+        elif serv_info["tipo_input"] == "art":
+            continue  # Tratado de forma separada no final do loop
         else:
             if dado > 0:
                 v_item = dado * precos[servico]
-                exibir, label = True, f"{dado:.1f} m" if "m" in servico or "Laje" in servico else f"{int(dado)} un"
+                exibir = True
+                if serv_info["tipo_input"] == "metragem":
+                    label = f"{dado:.1f} m"
+                elif serv_info["tipo_input"] == "componentes":
+                    label = f"{int(dado)} comp"
+                else:
+                    label = f"{int(dado)} un"
         
         if exibir:
             servicos_ativos = True
@@ -110,26 +328,40 @@ with tab_conf_serv:
                 c1, c2, c3, c4 = st.columns([0.4, 0.2, 0.2, 0.2])
                 c1.write(servico); c2.write(label); c3.write(f"R$ {v_item:.2f}")
                 if c4.button("🗑️", key=f"del_srv_{servico}"):
-                    if servico == "Instalação do Padrão": st.session_state.dados_servicos[servico]["incluir"] = False
-                    else: st.session_state.dados_servicos[servico] = 0.0
+                    if serv_info["tipo_input"] == "padrao":
+                        st.session_state.dados_servicos[servico]["incluir"] = False
+                    else:
+                        st.session_state.dados_servicos[servico] = 0.0
                     st.rerun()
 
-    if st.session_state.dados_servicos["Projeto e ART"]:
-        servicos_ativos = True
-        v_art = precos["Projeto e ART"] + (soma_base_para_art * 0.55)
-        with st.container(border=True):
-            c1, c2, c3, c4 = st.columns([0.4, 0.2, 0.2, 0.2])
-            c1.write("Projeto e ART"); c2.write("Fixo+55%"); c3.write(f"R$ {v_art:.2f}")
-            if c4.button("🗑️", key="del_art_conf"):
-                st.session_state.dados_servicos["Projeto e ART"] = False
-                st.rerun()
+    # Processamento e exibição da taxa do Projeto e ART se marcada
+    for servico, dado in st.session_state.dados_servicos.items():
+        serv_info = next((s for s in servicos_db if s["nome"] == servico), None)
+        if serv_info and serv_info["tipo_input"] == "art" and dado:
+            servicos_ativos = True
+            v_art = precos[servico] + (soma_base_para_art * 0.55)
+            with st.container(border=True):
+                c1, c2, c3, c4 = st.columns([0.4, 0.2, 0.2, 0.2])
+                c1.write(servico); c2.write("Fixo+55%"); c3.write(f"R$ {v_art:.2f}")
+                if c4.button("🗑️", key=f"del_art_{servico}"):
+                    st.session_state.dados_servicos[servico] = False
+                    st.rerun()
 
-    if not servicos_ativos: st.info("Nenhum serviço lançado.")
+    if not servicos_ativos:
+        st.info("Nenhum serviço lançado.")
 
-# --- ABA 3: MATERIAIS ---
+# --- ABA: MATERIAIS (CADASTRO E LANÇAMENTO) ---
 with tab_mat:
     st.subheader("📦 Lançamento de Materiais")
-    categoria = st.selectbox("Categoria:", ["CABOS", "DISJUNTORES", "MÓDULOS, TOMADAS E PLACAS", "CONDUÍTES", "CONDULETES", "OUTROS"])
+    
+    # Coleta categorias estáticas e materiais personalizados salvos no Supabase
+    lista_db_materiais = supabase_get("precif_materiais_base")
+    categorias_adicionais = sorted(list(set([m["categoria"] for m in lista_db_materiais])))
+    
+    categorias_base = ["CABOS", "DISJUNTORES", "MÓDULOS, TOMADAS E PLACAS", "CONDUÍTES", "CONDULETES", "OUTROS"]
+    todas_categorias = categorias_base + [c for c in categorias_adicionais if c not in categorias_base]
+    
+    categoria = st.selectbox("Categoria:", todas_categorias, key="sel_cat_materiais")
     
     with st.container(border=True):
         nome_f, uni_f, qtd_f = "", "", 0.0
@@ -155,88 +387,3 @@ with tab_mat:
             tipo = c1.selectbox("Tipo:", ["Placa 4x2", "Placa 4x4", "Módulo Tomada", "Módulo Interruptor"])
             if tipo == "Módulo Interruptor":
                 desc_op = ["Simples", "Three Way", "Four Way", "Simples com Tomada"]
-            elif tipo == "Módulo Tomada":
-                desc_op = ["10 A", "20 A", "USB", "RJ45", "TV"]
-            else:
-                desc_op = ["Cega", "1 posto", "2 postos", "3 postos", "4 postos", "6 postos"]
-            desc = c2.selectbox("Descrição:", desc_op)
-            qtd_f = c3.number_input("Qtde:", min_value=0, step=1, key="in_q_mod")
-            nome_f, uni_f = f"{tipo} {desc}", "pç"
-
-        elif categoria == "CONDUÍTES" or categoria == "CONDULETES":
-            c1, c2, c3 = st.columns(3)
-            bits = ['1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"', '2 1/2"', '3"', '4"']
-            sec = c1.selectbox("Bitola:", bits)
-            if categoria == "CONDUÍTES":
-                tipo_t = st.text_input("Tipo (ex: Corrugado):", key="t_cond")
-                uni_f = "m"
-            else:
-                tipo_t = st.selectbox("Tipo:", ["C", "E", "X", "T", "LR", "LL", "LB", "TB", "B"])
-                uni_f = "un"
-            qtd_f = c3.number_input("Quantidade:", min_value=0.0, key="q_tubo")
-            nome_f = f"{categoria.title()[:-1]} {sec} {tipo_t}"
-
-        elif categoria == "OUTROS":
-            c1, c2, c3 = st.columns([0.5, 0.2, 0.3])
-            nome_f = c1.text_input("Descrição:", key="d_out")
-            uni_f = c2.selectbox("Unid:", ["un", "m", "Pç", "kg"])
-            qtd_f = c3.number_input("Qtde:", min_value=0.0, key="q_out")
-
-        if st.button("➕ Adicionar à Lista"):
-            if nome_f and qtd_f > 0:
-                st.session_state.lista_materiais.append({"nome": nome_f.strip(), "qtd": qtd_f, "uni": uni_f})
-                # Mensagem momentânea
-                aviso = st.success("Material Lançado à Lista!")
-                time.sleep(1)
-                aviso.empty()
-                st.rerun()
-
-# --- ABA 4: CONFERÊNCIA MATERIAIS ---
-with tab_conf_mat:
-    st.subheader("🔍 Revisão de Materiais")
-    if not st.session_state.lista_materiais: st.info("Nenhum material lançado.")
-    else:
-        if st.button("🚨 Limpar Todos os Materiais"): st.session_state.lista_materiais = []; st.rerun()
-        for i, item in enumerate(st.session_state.lista_materiais):
-            with st.container(border=True):
-                c1, c2, c3, c4 = st.columns([0.5, 0.15, 0.15, 0.2])
-                st.session_state.lista_materiais[i]['nome'] = c1.text_input("Nome:", item['nome'], key=f"ed_n_{i}")
-                st.session_state.lista_materiais[i]['qtd'] = c2.number_input("Qtd:", value=float(item['qtd']), key=f"ed_q_{i}")
-                st.session_state.lista_materiais[i]['uni'] = c3.text_input("Unid:", item['uni'], key=f"ed_u_{i}")
-                if c4.button("🗑️", key=f"del_m_{i}"): st.session_state.lista_materiais.pop(i); st.rerun()
-
-# --- ABA 5: DOCUMENTO ---
-with tab_doc:
-    itens_orc, soma_mo = {}, 0.0
-    for k, v in st.session_state.dados_servicos.items():
-        if k == "Instalação do Padrão" and v["incluir"]:
-            val = precos[k] * {"Monofásico": 1.0, "Bifásico": 1.4, "Trifásico": 1.7}[v["tipo"]]
-            itens_orc[k], soma_mo = val, soma_mo + val
-        elif k != "Projeto e ART" and k != "Instalação do Padrão" and v > 0:
-            val = float(v) * precos[k]
-            itens_orc[k], soma_mo = val, soma_mo + val
-    if st.session_state.dados_servicos["Projeto e ART"]:
-        itens_orc["Projeto e ART"] = precos["Projeto e ART"] + (soma_mo * 0.55)
-    
-    total_mo = sum(itens_orc.values())
-    st.write(f"### Valor Total Geral: R$ {total_mo:.2f}")
-
-    def gerar_word(orc, mats, tot):
-        doc = Document()
-        for s in doc.sections: s.top_margin = s.bottom_margin = s.left_margin = s.right_margin = Pt(72)
-        style = doc.styles['Normal']
-        style.font.name, style.font.size, style.paragraph_format.line_spacing = 'Arial', Pt(12), 1.5
-        style.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-        if orc:
-            doc.add_heading('ORÇAMENTO DE MÃO DE OBRA', 1)
-            for k, v in orc.items():
-                p = doc.add_paragraph(); p.add_run(f"• {k}: ").bold = True; p.add_run(f"R$ {v:.2f}")
-            p_t = doc.add_paragraph(); p_t.add_run(f"\nVALOR TOTAL DO ORÇAMENTO: R$ {tot:.2f}").bold = True
-            if mats: doc.add_page_break()
-        if mats:
-            doc.add_heading('LISTA DE MATERIAIS', 1)
-            for m in mats: doc.add_paragraph(f"• {m['nome']}: {formatar_qtd(m['qtd'], m['uni'])} {m['uni']}")
-        buf = BytesIO(); doc.save(buf); return buf.getvalue()
-
-    if total_mo > 0 or len(st.session_state.lista_materiais) > 0:
-        st.download_button("📥 Baixar Documento Completo", gerar_word(itens_orc, st.session_state.lista_materiais, total_mo), "orcamento.docx", type="primary")
