@@ -1,4 +1,4 @@
-import streamlit st
+import streamlit as st
 import httpx
 from docx import Document
 from docx.shared import Pt
@@ -97,8 +97,7 @@ for s in servicos_db:
 if 'lista_materiais' not in st.session_state:
     st.session_state.lista_materiais = []
 
-# --- CORREÇÃO CRÍTICA DO KEYERROR ---
-# Mapeia os preços de TODOS os serviços do banco globalmente no início para evitar falhas
+# --- MAPEAMENTO GLOBAL DE PREÇOS ---
 precos = {}
 for s in servicos_db:
     precos[s["nome"]] = float(s["valor"])
@@ -118,7 +117,6 @@ with st.sidebar:
             valores_novos[s["nome"]] = st.number_input(
                 f"Valor: {s['nome']}", value=float(s["valor"]), key=f"p_input_{s['nome']}"
             )
-            # Atualiza dinamicamente o mapa global conforme digitação
             precos[s["nome"]] = valores_novos[s["nome"]]
             
         if st.button("💾 Confirmar Novos Valores M.O.", type="primary", use_container_width=True):
@@ -191,6 +189,8 @@ with st.sidebar:
                     elif v == "Kg":
                         v_kg = c_label.number_input("Peso (Kg):", min_value=0.0, value=0.0, key="v_mat_kg")
                         v_val = c_val.number_input("Valor por Kg (R$):", min_value=0.0, value=0.0, key="v_mat_kg_val")
+                        if v_kg > 0: partes_nome_mat.append(f"{v_kg}kg")
+                        custo_total_material += (v_kg * v_val)
 # --- CONTINUAÇÃO DO CÓDIGO (PARTE 2 DE 2) ---
 
 def formatar_qtd(qtd, unidade):
