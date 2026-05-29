@@ -20,7 +20,7 @@ headers = {
 }
 
 # --- CACHE DE CONSULTAS PARA EVITAR LOOPS DE CARREGAMENTO ---
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=5)
 def supabase_get(tabela, params=None):
     try:
         url = f"{URL_SUPABASE}/rest/v1/{tabela}"
@@ -124,7 +124,7 @@ with st.sidebar:
         if s["nome"] not in precos:
             precos[s["nome"]] = float(s["valor"])
 
-    if st.button("💾 Confirmar Novos Valores", type="primary", use_container_width=True, key="btn_salvar_precos_side"):
+    if st.button("💾 Confirmar Novos Valores M.O.", type="primary", use_container_width=True, key="btn_salvar_precos_side"):
         for s in servicos_filtrados:
             supabase_upsert("precif_servicos", {
                 "nome": s["nome"],
@@ -143,7 +143,7 @@ with st.sidebar:
     novo_tipo_in = st.selectbox("Tipo de Cobrança:", ["quantidade", "metragem", "componentes"], key="add_tipo_serv")
     novo_valor = st.number_input("Valor Inicial (R$):", min_value=0.0, value=50.0, key="add_val_serv")
     
-    if st.button("Adicionar Serviço", use_container_width=True, key="btn_add_serv_side"):
+    if st.button("Confirmar Lançamento M.O.", use_container_width=True, key="btn_add_serv_side"):
         if novo_nome.strip():
             if not any(s['nome'].lower() == novo_nome.strip().lower() for s in servicos_db):
                 supabase_post("precif_servicos", {
@@ -153,7 +153,7 @@ with st.sidebar:
                     "tipo_input": novo_tipo_in,
                     "deletavel": True
                 })
-                st.success("Serviço criado!")
+                st.success("Serviço adicionado!")
                 time.sleep(0.5)
                 st.rerun()
             else:
@@ -166,7 +166,7 @@ with st.sidebar:
         st.divider()
         st.subheader("🗑️ Excluir Mão de Obra")
         serv_para_deletar = st.selectbox("Selecione para excluir:", [s["nome"] for s in servicos_deletaveis], key="sel_del_serv")
-        if st.button("Remover Serviço Definitivamente", type="secondary", use_container_width=True, key="btn_remover_serv"):
+        if st.button("Confirmar Exclusão de M.O.", type="secondary", use_container_width=True, key="btn_remover_serv"):
             supabase_delete("precif_servicos", {"nome": f"eq.{serv_para_deletar}"})
             if serv_para_deletar in st.session_state.dados_servicos:
                 st.session_state.dados_servicos.pop(serv_para_deletar)
@@ -329,7 +329,7 @@ with tab_mat:
     categoria = st.selectbox("Categoria:", todas_categorias, key="sel_cat_materiais")
     
     with st.container(border=True):
-        nome_f, uni_f, qtd_f = "", "", 0.0
+        nome_f, uni_f, qtd_f = "", "un", 0.0
         
         if categoria == "CABOS":
             c1, c2, c3 = st.columns(3)
