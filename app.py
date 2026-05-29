@@ -20,7 +20,7 @@ headers = {
 }
 
 # --- CACHE DE CONSULTAS PARA EVITAR LOOPS DE CARREGAMENTO ---
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=30)
 def supabase_get(tabela, params=None):
     try:
         url = f"{URL_SUPABASE}/rest/v1/{tabela}"
@@ -77,7 +77,6 @@ servicos_padrao_local = [
     {"nome": "Montagem de Comandos", "tipo_categoria": "Industrial", "valor": 50.0, "tipo_input": "componentes", "deletavel": True}
 ]
 
-# Tenta ler do Supabase, se falhar ou estiver vazio usa a lista padrão de memória
 servicos_db = supabase_get("precif_servicos")
 if not servicos_db:
     servicos_db = servicos_padrao_local
@@ -101,8 +100,6 @@ if 'lista_materiais' not in st.session_state:
 # --- MENU DE SELEÇÃO DE AMBIENTE DA SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Configurações do App")
-    
-    # Substitui os loops automáticos das abas por um botão limpo e sem recarregamentos indesejados
     aba_selecionada = st.radio("Selecione o Ambiente de Trabalho:", ["Predial", "Industrial"], key="radio_ambiente_global")
 
     st.subheader(f"Mão de Obra: {aba_selecionada}")
@@ -127,7 +124,7 @@ with st.sidebar:
         if s["nome"] not in precos:
             precos[s["nome"]] = float(s["valor"])
 
-    if st.button("💾 Confirmar Novos Valores", type="primary", use_container_width=True):
+    if st.button("💾 Confirmar Novos Valores", type="primary", use_container_width=True, key="btn_salvar_precos_side"):
         for s in servicos_filtrados:
             supabase_upsert("precif_servicos", {
                 "nome": s["nome"],
@@ -146,7 +143,7 @@ with st.sidebar:
     novo_tipo_in = st.selectbox("Tipo de Cobrança:", ["quantidade", "metragem", "componentes"], key="add_tipo_serv")
     novo_valor = st.number_input("Valor Inicial (R$):", min_value=0.0, value=50.0, key="add_val_serv")
     
-    if st.button("Adicionar Serviço", use_container_width=True):
+    if st.button("Adicionar Serviço", use_container_width=True, key="btn_add_serv_side"):
         if novo_nome.strip():
             if not any(s['nome'].lower() == novo_nome.strip().lower() for s in servicos_db):
                 supabase_post("precif_servicos", {
@@ -161,6 +158,21 @@ with st.sidebar:
                 st.rerun()
             else:
                 st.error("Serviço já existente!")
+        else:
+            st.error("Insira um nome válido.")
+
+    servicos_deletaveis = [s for s in servicos_filtrados if s["deletavel"]]
+    if servicos_deletaveis:
+        st.divider()
+        st.subheader("🗑️ Excluir Mão de Obra")
+        serv_para_deletar = st.selectbox("Selecione para excluir:", [s["nome"] for s in servicos_deletaveis], key="sel_del_serv")
+        if st.button("Remover Serviço Definitivamente", type="secondary", use_container_width=True, key="btn_remover_serv"):
+            supabase_delete("precif_servicos", {"nome": f"eq.{serv_para_deletar}"})
+            if serv_para_deletar in st.session_state.dados_servicos:
+                st.session_state.dados_servicos.pop(serv_para_deletar)
+            st.success("Serviço removido!")
+            time.sleep(0.5)
+            st.rerun()
 # --- CONTINUAÇÃO DO CÓDIGO (PARTE 2 DE 2) ---
 
 def formatar_qtd(qtd, unidade):
