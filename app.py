@@ -363,5 +363,5 @@ with tab_mat:
             qtd_f = c3.number_input("Qtde:", min_value=0, step=1, key="in_q_mod")
             nome_f, uni_f = f"{tipo} {desc}", "pç"
 
-    elif categoria in ["CONDUÍTES", "CONDULETES"]:
+            elif categoria in ["CONDUÍTES", "CONDULETES"]:
         with st.container(border=True):
