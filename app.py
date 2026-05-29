@@ -82,7 +82,7 @@ elif len(servicos_db) == 0:
         supabase_post("precif_servicos", p)
     servicos_db = servicos_padrao_local
 
-# --- INICIALIZAÇÃO DO ESTADO ---
+# --- INICIALIZAÇÃO DO ESTADO REVISADA ---
 if 'dados_servicos' not in st.session_state:
     st.session_state.dados_servicos = {}
 
@@ -95,8 +95,9 @@ for s in servicos_db:
         else:
             st.session_state.dados_servicos[s["nome"]] = 0.0
 
+# Correção da variável para bater exatamente com todo o escopo do código original
 if 'lista_materiais' not in st.session_state:
-    st.session_state.lista_materials = []
+    st.session_state.lista_materiais = []
 
 if "aba_atual" not in st.session_state:
     st.session_state.aba_atual = "Predial"
@@ -134,6 +135,7 @@ with st.sidebar:
     if st.button("💾 Confirmar Novos Valores", type="primary", use_container_width=True, key="btn_confirmar_precos"):
         for s in servicos_filtrados:
             supabase_upsert("precif_servicos", {
+                "name_id_alias": s["nome"],  # Evita colisões utilizando mapeamento estrito
                 "nome": s["nome"],
                 "tipo_categoria": s["tipo_categoria"],
                 "valor": valores_novos[s["nome"]],
@@ -372,3 +374,5 @@ with tab_mat:
                 desc_op = ["Cega", "1 posto", "2 postos", "3 postos", "4 postos", "6 postos"]
             desc = c2.selectbox("Descrição:", desc_op)
             qtd_f = c3.number_input("Qtde:", min_value=0, step=1, key="in_q_mod")
+            nome_f, uni_f = f"{tipo} {desc}", "pç"
+
