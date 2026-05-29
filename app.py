@@ -328,9 +328,10 @@ with tab_mat:
     
     categoria = st.selectbox("Categoria:", todas_categorias, key="sel_cat_materiais")
     
+    # Inicialização global e segura das variáveis para evitar quebras de escopo
+    nome_f, uni_f, qtd_f = "", "un", 0.0
+    
     with st.container(border=True):
-        nome_f, uni_f, qtd_f = "", "un", 0.0
-        
         if categoria == "CABOS":
             c1, c2, c3 = st.columns(3)
             sec = c1.selectbox("Seção:", ["1,0 mm²", "1,5 mm²", "2,5 mm²", "4,0 mm²", "6,0 mm²", "10 mm²", "16 mm²", "25 mm²", "35 mm²"])
@@ -362,5 +363,3 @@ with tab_mat:
 
         elif categoria in ["CONDUÍTES", "CONDULETES"]:
             c1, c2, c3 = st.columns(3)
-            bits = ['1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"', '2 1/2"', '3"', '4"']
-            sec = c1.selectbox("Bitola:", bits)
