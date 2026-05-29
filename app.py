@@ -385,3 +385,4 @@ with tab_conf_serv:
     def gerar_word_proposicao(orc, mats, tot):
         doc = Document()
         for s in doc.sections:
+            s.top_margin = Pt(72)
