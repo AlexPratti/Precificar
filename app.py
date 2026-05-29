@@ -19,21 +19,23 @@ headers = {
     "Prefer": "return=representation"
 }
 
-# --- FUNÇÕES DE BANCO DE DADOS (SUPABASE REST API) ---
+# --- CACHE DE CONSULTAS PARA EVITAR LOOPS DE CARREGAMENTO ---
+@st.cache_data(ttl=60)
 def supabase_get(tabela, params=None):
     try:
         url = f"{URL_SUPABASE}/rest/v1/{tabela}"
         r = httpx.get(url, headers=headers, params=params, timeout=5.0)
         if r.status_code == 200:
             return r.json()
-        return None
+        return []
     except Exception:
-        return None
+        return []
 
 def supabase_post(tabela, dado):
     try:
         url = f"{URL_SUPABASE}/rest/v1/{tabela}"
         httpx.post(url, headers=headers, json=dado, timeout=5.0)
+        st.cache_data.clear()
     except Exception:
         pass
 
@@ -43,6 +45,7 @@ def supabase_upsert(tabela, dados):
         headers_upsert = headers.copy()
         headers_upsert["Prefer"] = "resolution=merge-duplicates,return=representation"
         httpx.post(url, headers=headers_upsert, json=dados, timeout=5.0)
+        st.cache_data.clear()
     except Exception:
         pass
 
@@ -50,10 +53,11 @@ def supabase_delete(tabela, filtros):
     try:
         url = f"{URL_SUPABASE}/rest/v1/{tabela}"
         httpx.delete(url, headers=headers, params=filtros, timeout=5.0)
+        st.cache_data.clear()
     except Exception:
         pass
 
-# --- FALLBACK SE A TABELA NÃO EXISTIR NO BANCO AINDA ---
+# --- FALLBACK DE SEGURANÇA SE AS TABELAS NÃO EXISTIREM ---
 servicos_padrao_local = [
     {"nome": "Pontos Altos de Força", "tipo_categoria": "Predial", "valor": 20.0, "tipo_input": "quantidade", "deletavel": False},
     {"nome": "Pontos Baixos e Médios de Força", "tipo_categoria": "Predial", "valor": 15.0, "tipo_input": "quantidade", "deletavel": False},
@@ -73,16 +77,12 @@ servicos_padrao_local = [
     {"nome": "Montagem de Comandos", "tipo_categoria": "Industrial", "valor": 50.0, "tipo_input": "componentes", "deletavel": True}
 ]
 
-# Tenta ler do banco, se der erro ou vier vazio usa o plano B (memória local)
+# Tenta ler do Supabase, se falhar ou estiver vazio usa a lista padrão de memória
 servicos_db = supabase_get("precif_servicos")
-if servicos_db is None:
-    servicos_db = servicos_padrao_local
-elif len(servicos_db) == 0:
-    for p in servicos_padrao_local:
-        supabase_post("precif_servicos", p)
+if not servicos_db:
     servicos_db = servicos_padrao_local
 
-# --- INICIALIZAÇÃO DO ESTADO REVISADA ---
+# --- INICIALIZAÇÃO DE ESTADOS DA SESSÃO ---
 if 'dados_servicos' not in st.session_state:
     st.session_state.dados_servicos = {}
 
@@ -95,23 +95,18 @@ for s in servicos_db:
         else:
             st.session_state.dados_servicos[s["nome"]] = 0.0
 
-# Correção da variável para bater exatamente com todo o escopo do código original
 if 'lista_materiais' not in st.session_state:
     st.session_state.lista_materiais = []
 
-if "aba_atual" not in st.session_state:
-    st.session_state.aba_atual = "Predial"
-
-def formatar_qtd(qtd, unidade):
-    if unidade.lower() == "m":
-        return f"{float(qtd):.1f}"
-    return f"{int(qtd)}"
-
-# --- SIDEBAR: PREÇOS MÃO DE OBRA ---
+# --- MENU DE SELEÇÃO DE AMBIENTE DA SIDEBAR ---
 with st.sidebar:
-    st.header(f"⚙️ Preços Mão de Obra ({st.session_state.aba_atual})")
+    st.header("⚙️ Configurações do App")
     
-    servicos_filtrados = [s for s in servicos_db if s["tipo_categoria"] == st.session_state.aba_atual]
+    # Substitui os loops automáticos das abas por um botão limpo e sem recarregamentos indesejados
+    aba_selecionada = st.radio("Selecione o Ambiente de Trabalho:", ["Predial", "Industrial"], key="radio_ambiente_global")
+
+    st.subheader(f"Mão de Obra: {aba_selecionada}")
+    servicos_filtrados = [s for s in servicos_db if s["tipo_categoria"] == aba_selecionada]
     
     precos = {}
     valores_novos = {}
@@ -132,74 +127,51 @@ with st.sidebar:
         if s["nome"] not in precos:
             precos[s["nome"]] = float(s["valor"])
 
-    if st.button("💾 Confirmar Novos Valores", type="primary", use_container_width=True, key="btn_confirmar_precos"):
+    if st.button("💾 Confirmar Novos Valores", type="primary", use_container_width=True):
         for s in servicos_filtrados:
             supabase_upsert("precif_servicos", {
-                "name_id_alias": s["nome"],  # Evita colisões utilizando mapeamento estrito
                 "nome": s["nome"],
                 "tipo_categoria": s["tipo_categoria"],
                 "valor": valores_novos[s["nome"]],
                 "tipo_input": s["tipo_input"],
                 "deletavel": s["deletavel"]
             })
-        st.success("Preços atualizados com sucesso!")
-        time.sleep(0.8)
+        st.success("Preços salvos!")
+        time.sleep(0.5)
         st.rerun()
         
     st.divider()
-    
     st.subheader("➕ Nova Mão de Obra")
     novo_nome = st.text_input("Nome do Serviço:", key="add_nome_serv")
     novo_tipo_in = st.selectbox("Tipo de Cobrança:", ["quantidade", "metragem", "componentes"], key="add_tipo_serv")
     novo_valor = st.number_input("Valor Inicial (R$):", min_value=0.0, value=50.0, key="add_val_serv")
     
-    if st.button("Adicionar Serviço", use_container_width=True, key="btn_adicionar_serv"):
+    if st.button("Adicionar Serviço", use_container_width=True):
         if novo_nome.strip():
             if not any(s['nome'].lower() == novo_nome.strip().lower() for s in servicos_db):
                 supabase_post("precif_servicos", {
                     "nome": novo_nome.strip(),
-                    "tipo_categoria": st.session_state.aba_atual,
+                    "tipo_categoria": aba_selecionada,
                     "valor": novo_valor,
                     "tipo_input": novo_tipo_in,
                     "deletavel": True
                 })
-                st.success("Serviço adicionado!")
-                time.sleep(0.8)
+                st.success("Serviço criado!")
+                time.sleep(0.5)
                 st.rerun()
             else:
-                st.error("Este serviço já existe!")
-        else:
-            st.error("Insira um nome válido.")
-
-    servicos_deletaveis = [s for s in servicos_filtrados if s["deletavel"]]
-    if servicos_deletaveis:
-        st.divider()
-        st.subheader("🗑️ Excluir Mão de Obra")
-        serv_para_deletar = st.selectbox("Selecione para excluir:", [s["nome"] for s in servicos_deletaveis], key="sel_del_serv")
-        if st.button("Remover Serviço Definitivamente", type="secondary", use_container_width=True, key="btn_remover_serv"):
-            supabase_delete("precif_servicos", {"nome": f"eq.{serv_para_deletar}"})
-            if serv_para_deletar in st.session_state.dados_servicos:
-                st.session_state.dados_servicos.pop(serv_para_deletar)
-            st.success("Serviço removido!")
-            time.sleep(0.8)
-            st.rerun()
+                st.error("Serviço já existente!")
 # --- CONTINUAÇÃO DO CÓDIGO (PARTE 2 DE 2) ---
 
-# --- CONFIGURAÇÃO E MAPEAMENTO DAS ABAS PRINCIPAIS ---
+def formatar_qtd(qtd, unidade):
+    if unidade.lower() == "m":
+        return f"{float(qtd):.1f}"
+    return f"{int(qtd)}"
+
+# --- ABAS PRINCIPAIS ---
 tab_predial, tab_industrial, tab_conf_serv, tab_mat, tab_conf_mat, tab_doc = st.tabs([
     "🏢 Predial", "🏭 Industrial", "🔍 Conferência Serviços", "📦 Materiais", "🔍 Conferência Materiais", "📄 Gerar Orçamento"
 ])
-
-# --- CONTROLE DINÂMICO DE CONTEXTO DA SIDEBAR ---
-with tab_predial:
-    if st.session_state.aba_atual != "Predial":
-        st.session_state.aba_atual = "Predial"
-        st.rerun()
-
-with tab_industrial:
-    if st.session_state.aba_atual != "Industrial":
-        st.session_state.aba_atual = "Industrial"
-        st.rerun()
 
 # --- ABA: PREDIAL (MÃO DE OBRA) ---
 with tab_predial:
@@ -376,3 +348,7 @@ with tab_mat:
             qtd_f = c3.number_input("Qtde:", min_value=0, step=1, key="in_q_mod")
             nome_f, uni_f = f"{tipo} {desc}", "pç"
 
+        elif categoria in ["CONDUÍTES", "CONDULETES"]:
+            c1, c2, c3 = st.columns(3)
+            bits = ['1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"', '2 1/2"', '3"', '4"']
+            sec = c1.selectbox("Bitola:", bits)
