@@ -60,7 +60,7 @@ def supabase_delete(tabela, filtros):
 # --- FALLBACK DE SEGURANÇA SE AS TABELAS NÃO EXISTIREM ---
 servicos_padrao_local = [
     {"nome": "Pontos Altos de Força", "tipo_categoria": "Predial", "valor": 20.0, "tipo_input": "quantidade", "deletavel": False},
-    {"nome": "Pontos Baixos e Médios de Força", "tipo_categoria": "Predial", "valor": 15.0, "tipo_input": "quantidade", "deletavel": False},
+    {"nome": "Pontos Basixos e Médios de Força", "tipo_categoria": "Predial", "valor": 15.0, "tipo_input": "quantidade", "deletavel": False},
     {"nome": "Luminárias em Teto/Gesso/PVC", "tipo_categoria": "Predial", "valor": 35.0, "tipo_input": "quantidade", "deletavel": False},
     {"nome": "Perfil LED em Teto/Gesso/PVC", "tipo_categoria": "Predial", "valor": 25.0, "tipo_input": "metragem", "deletavel": False},
     {"nome": "Fiação de Distribuição", "tipo_categoria": "Predial", "valor": 15.0, "tipo_input": "metragem", "deletavel": False},
@@ -328,7 +328,6 @@ with tab_mat:
     
     categoria = st.selectbox("Categoria:", todas_categorias, key="sel_cat_materiais")
     
-    # Inicialização global e segura das variáveis para evitar quebras de escopo
     nome_f, uni_f, qtd_f = "", "un", 0.0
     
     with st.container(border=True):
@@ -363,3 +362,5 @@ with tab_mat:
 
         elif categoria in ["CONDUÍTES", "CONDULETES"]:
             c1, c2, c3 = st.columns(3)
+            bits = ['1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"', '2 1/2"', '3"', '4"']
+            sec = c1.selectbox("Bitola:", bits)
