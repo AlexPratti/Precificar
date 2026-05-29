@@ -363,5 +363,8 @@ with tab_mat:
             qtd_f = c3.number_input("Qtde:", min_value=0, step=1, key="in_q_mod")
             nome_f, uni_f = f"{tipo} {desc}", "pç"
 
-            elif categoria in ["CONDUÍTES", "CONDULETES"]:
+    elif categoria in ["CONDUÍTES", "CONDULETES"]:
         with st.container(border=True):
+            c1, c2, c3 = st.columns(3)
+            bits = ['1/2"', '3/4"', '1"', '1 1/4"', '1 1/2"', '2"', '2 1/2"', '3"', '4"']
+            sec = c1.selectbox("Bitola:", bits)
