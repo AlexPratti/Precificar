@@ -85,13 +85,6 @@ if not servicos_db:
 if 'dados_servicos' not in st.session_state:
     st.session_state.dados_servicos = {}
 
-# Suporte a rótulos customizados na edição final
-if 'labels_customizados' not in st.session_state:
-    st.session_state.labels_customizados = {}
-
-if 'unidades_materiais' not in st.session_state:
-    st.session_state.unidades_materiais = {}
-
 for s in servicos_db:
     if s["nome"] not in st.session_state.dados_servicos:
         if s["tipo_input"] == "padrao":
@@ -198,38 +191,52 @@ with st.sidebar:
                         v_val = c_val.number_input("Valor por Kg (R$):", min_value=0.0, value=0.0, key="v_mat_kg_val")
                         if v_kg > 0: partes_nome_mat.append(f"{v_kg}kg")
                         custo_total_material += (v_kg * v_val)
+                        
+            # Lógica para acrescentar material estruturado na lista global de materiais
+            if st.button("Salvar Material no Serviço", use_container_width=True, key="save_mat_sidebar_btn"):
+                if nome_mat_base:
+                    nome_completo_mat = " ".join(partes_nome_mat)
+                    st.session_state.lista_materiais.append({
+                        "nome": nome_completo_mat,
+                        "qtd": 1.0,  # Valor base que será ajustado nas tabelas
+                        "unidade": uni_mat_base,
+                        "preco_calculado": custo_total_material
+                    })
+                    st.success("Material adicionado com sucesso!")
+                    time.sleep(0.4)
+                    st.rerun()
 def formatar_qtd(qtd, unidade):
     if unidade.lower() == "m":
         return f"{float(qtd):.1f}"
     return f"{int(qtd)}"
 
-# --- ABAS PRINCIPAIS ---
-tab_predial, tab_industrial, tab_conf_serv = st.tabs([
-    "🏢 Predial", "🏭 Industrial", "🔍 Conferência e Fechamento"
-])
+# --- CÁLCULO PRÉVIO DE SERVIÇOS ATIVOS PARA OS CONTADORES DE ABAS ---
+cont_predial_ativos = 0
+cont_industrial_ativos = 0
 
-# --- FUNÇÃO DE CONTAGEM AUXILIAR ---
-def contar_confirmados(categoria):
-    contagem = 0
-    for k, v in st.session_state.dados_servicos.items():
-        info = next((s for s in servicos_db if s["nome"] == k and s["tipo_categoria"] == categoria), None)
-        if info:
-            if info["tipo_input"] == "padrao" and v.get("incluir"):
-                contagem += 1
-            elif info["tipo_input"] == "art" and v:
-                contagem += 1
-            elif info["tipo_input"] not in ["padrao", "art"] and isinstance(v, (int, float)) and v > 0:
-                contagem += 1
-    return contagem
+for k_serv, v_dado in st.session_state.dados_servicos.items():
+    s_info = next((s for s in servicos_db if s["nome"] == k_serv), None)
+    if s_info:
+        if s_info["tipo_input"] == "padrao" and isinstance(v_dado, dict) and v_dado.get("incluir"):
+            if s_info["tipo_categoria"] == "Predial": cont_predial_ativos += 1
+            if s_info["tipo_categoria"] == "Industrial": cont_industrial_ativos += 1
+        elif s_info["tipo_input"] == "art" and v_dado:
+            if s_info["tipo_categoria"] == "Predial": cont_predial_ativos += 1
+            if s_info["tipo_categoria"] == "Industrial": cont_industrial_ativos += 1
+        elif s_info["tipo_input"] not in ["padrao", "art"] and isinstance(v_dado, (int, float)) and v_dado > 0:
+            if s_info["tipo_categoria"] == "Predial": cont_predial_ativos += 1
+            if s_info["tipo_categoria"] == "Industrial": cont_industrial_ativos += 1
+
+# --- ABAS PRINCIPAIS COM CONTADORES ---
+tab_predial, tab_industrial, tab_conf_serv = st.tabs([
+    f"🏢 Predial ({cont_predial_ativos})", 
+    f"🏭 Industrial ({cont_industrial_ativos})", 
+    "🔍 Conferência e Fechamento"
+])
 
 # --- ABA 1: PREDIAL (MÃO DE OBRA) ---
 with tab_predial:
     st.subheader("Lançamento de Mão de Obra - Predial")
-    
-    # Marcador visual de quantidade
-    qtd_predial_conf = contar_confirmados("Predial")
-    st.info(f"📊 Serviços Prediais Confirmados no Orçamento: **{qtd_predial_conf}**")
-    
     servicos_prediais = [s for s in servicos_db if s["tipo_categoria"] == "Predial"]
     nomes_prediais = [s["nome"] for s in servicos_prediais]
     
@@ -286,15 +293,9 @@ with tab_predial:
                 st.rerun()
     else:
         st.info("Nenhum serviço predial configurado no banco de dados.")
-
 # --- ABA 2: INDUSTRIAL (MÃO DE OBRA) ---
 with tab_industrial:
     st.subheader("Lançamento de Mão de Obra - Industrial")
-    
-    # Marcador visual de quantidade
-    qtd_ind_conf = contar_confirmados("Industrial")
-    st.info(f"📊 Serviços Industriais Confirmados no Orçamento: **{qtd_ind_conf}**")
-    
     servicos_industriais = [s for s in servicos_db if s["tipo_categoria"] == "Industrial"]
     nomes_industriais = [s["nome"] for s in servicos_industriais]
     
@@ -341,26 +342,103 @@ with tab_industrial:
                 st.rerun()
     else:
         st.info("Nenhum serviço industrial configurado no banco de dados.")
-    # --- PROCESSAMENTO ESPECÍFICO PARA PROJETOS/ART (Fixo + 55%) ---
-    for servico, dado in st.session_state.dados_servicos.items():
+
+# --- ABA 3: CONFERÊNCIA E FECHAMENTO GERAL ---
+with tab_conf_serv:
+    st.subheader("🔍 Revisão de Serviços Lançados")
+    soma_base_para_art = 0.0
+    servicos_ativos = False
+    
+    col_z1, col_z2 = st.columns([0.5, 0.5])
+    if col_z1.button("🚨 Zerar Todos os Serviços Lançados", key="btn_clear_all_srv"):
+        for k in st.session_state.dados_servicos.keys():
+            serv_info = next((s for s in servicos_db if s["nome"] == k), None)
+            if serv_info and serv_info["tipo_input"] == "padrao":
+                st.session_state.dados_servicos[k] = {"incluir": False, "tipo": "Monofásico"}
+            elif serv_info and serv_info["tipo_input"] == "art":
+                st.session_state.dados_servicos[k] = False
+            else:
+                st.session_state.dados_servicos[k] = 0.0
+        st.rerun()
+        
+    if col_z2.button("🚨 Limpar Lista de Materiais Atual", key="btn_clear_all_mat"):
+        st.session_state.lista_materiais = []
+        st.rerun()
+        
+    st.divider()
+    
+    # --- TABELA DE REVISÃO DE MÃO DE OBRA (EDITÁVEL) ---
+    st.markdown("### 📋 Serviços de Mão de Obra Incluídos")
+    c_h1, c_h2, c_h3, c_h4 = st.columns([0.4, 0.2, 0.2, 0.2])
+    c_h1.write("**Serviço / Item**")
+    c_h2.write("**Qtd / Unidade**")
+    c_h3.write("**Subtotal M.O.**")
+    c_h4.write("**Remover**")
+
+    itens_orc = {}
+    
+    for servico, dado in list(st.session_state.dados_servicos.items()):
         serv_info = next((s for s in servicos_db if s["nome"] == servico), None)
-        if serv_info and serv_info["tipo_input"] == "art" and dado:
-            servicos_ativos = True
-            v_art = precos[servico] + (soma_base_para_art * 0.55)
-            itens_orc[servico] = v_art
+        if not serv_info:
+            continue
             
-            with st.container(border=True):
-                cl1, cl2, cl3, cl4 = st.columns([0.4, 0.2, 0.2, 0.2])
-                cl1.write(servico)
-                cl2.write("Fixo + 55%")
-                cl3.write(f"R$ {v_art:.2f}")
-                if cl4.button("🗑️", key=f"del_aba_art_{servico}"):
-                    st.session_state.dados_servicos[servico] = False
-                    st.rerun()
-
-    if not servicos_ativos:
-        st.info("Nenhum serviço lançado até o momento.")
-
+        v_item, exibir, label = 0.0, False, ""
+        
+        if serv_info["tipo_input"] == "padrao":
+            if isinstance(dado, dict) and dado.get("incluir"):
+                v_item = precos[servico] * {"Monofásico": 1.0, "Bifásico": 1.4, "Trifásico": 1.7}[dado["tipo"]]
+                exibir = True
+                
+                with st.container(border=True):
+                    cl1, cl2, cl3, cl4 = st.columns([0.4, 0.2, 0.2, 0.2])
+                    cl1.write(servico)
+                    
+                    nova_fase = cl2.selectbox(
+                        "Fase:", ["Monofásico", "Bifásico", "Trifásico"], 
+                        index=["Monofásico", "Bifásico", "Trifásico"].index(dado["tipo"]), 
+                        key=f"ed_fase_tab_{servico}"
+                    )
+                    if nova_fase != dado["tipo"]:
+                        st.session_state.dados_servicos[servico]["tipo"] = nova_fase
+                        st.rerun()
+                        
+                    cl3.write(f"R$ {v_item:.2f}")
+                    if cl4.button("🗑️", key=f"del_aba_srv_{servico}"):
+                        st.session_state.dados_servicos[servico]["incluir"] = False
+                        st.rerun()
+                        
+        elif serv_info["tipo_input"] == "art":
+            continue
+        else:
+            if isinstance(dado, (int, float)) and dado > 0:
+                v_item = dado * precos[servico]
+                exibir = True
+                
+                with st.container(border=True):
+                    cl1, cl2, cl3, cl4 = st.columns([0.4, 0.2, 0.2, 0.2])
+                    cl1.write(servico)
+                    
+                    sub_cl1, sub_cl2 = cl2.columns([0.6, 0.4])
+                    novo_val_mo = sub_cl1.number_input(
+                        "Valor:", value=float(dado), step=0.5, key=f"ed_val_tab_{servico}", label_visibility="collapsed"
+                    )
+                    
+                    unidade_mo_exibida = "un" if serv_info["tipo_input"] == "quantidade" else ("m" if serv_info["tipo_input"] == "metragem" else "comp")
+                    sub_cl2.markdown(f"**{unidade_mo_exibida}**")
+                    
+                    if novo_val_mo != dado:
+                        st.session_state.dados_servicos[servico] = novo_val_mo
+                        st.rerun()
+                        
+                    cl3.write(f"R$ {v_item:.2f}")
+                    if cl4.button("🗑️", key=f"del_aba_srv_{servico}"):
+                        st.session_state.dados_servicos[servico] = 0.0
+                        st.rerun()
+        
+        if exibir:
+            servicos_ativos = True
+            soma_base_para_art += v_item
+            itens_orc[servico] = v_item
     # --- TABELA DE REVISÃO DE MATERIAIS (EDITÁVEL) ---
     st.divider()
     st.markdown("### 📦 Materiais Lançados pela Barra Lateral")
@@ -378,18 +456,17 @@ with tab_industrial:
             with st.container(border=True):
                 m1, m2, m3, m4 = st.columns([0.4, 0.2, 0.2, 0.2])
                 
-                # Permite edição do nome
+                # Permite edição do nome do material em tempo real
                 st.session_state.lista_materiais[i]['nome'] = m1.text_input(
                     "Nome:", item['nome'], key=f"ed_aba_n_{i}", label_visibility="collapsed"
                 )
                 
-                # Permite edição da quantidade e unidade em colunas internas
+                # Divisão interna para editar Quantidade e Unidade lado a lado
                 sub_c1, sub_c2 = m2.columns([0.5, 0.5])
                 st.session_state.lista_materiais[i]['qtd'] = sub_c1.number_input(
                     "Qtd:", value=float(item['qtd']), step=1.0, key=f"ed_aba_q_{i}", label_visibility="collapsed"
                 )
                 
-                # Inicializa chave de unidade caso não exista para evitar falhas
                 if 'unidade' not in st.session_state.lista_materiais[i]:
                     st.session_state.lista_materiais[i]['unidade'] = "un"
                     
@@ -406,7 +483,7 @@ with tab_industrial:
                     st.session_state.lista_materiais.pop(i)
                     st.rerun()
 
-    # --- RESUMO GERAL DOS VALORES ---
+    # --- RESUMO GERAL DOS VALORES DO ORÇAMENTO ---
     st.divider()
     total_mo_calculado = sum(itens_orc.values())
     total_mats_calculado = sum([m.get("preco_calculado", 0.0) for m in st.session_state.lista_materiais])
@@ -417,7 +494,7 @@ with tab_industrial:
         st.write(f"### Valor Total de Materiais Informados: R$ {total_mats_calculado:.2f}")
     st.write(f"## 💰 Valor Geral da Proposta: R$ {valor_geral_proposta:.2f}")
 
-    # --- CENTRAL DE DOWNLOADS VIA GERAÇÃO DE PDF ---
+    # --- CENTRAL DE DOWNLOADS EXCLUSIVA VIA GERAÇÃO DE PDF ---
     st.markdown("### 📄 Central de Exportação em PDF")
     col_d1, col_d2, col_d3 = st.columns(3)
     
@@ -440,7 +517,7 @@ with tab_industrial:
         )
         
     if st.session_state.lista_materiais:
-        # Relatório 1: Materiais completos com valores
+        # Relatório de materiais completo com custos
         pdf_mat_com_preco = f"========================================\n" \
                             f"   RELATORIO DE MATERIAIS (COM PRECOS)  \n" \
                             f"========================================\n\n"
@@ -458,7 +535,7 @@ with tab_industrial:
             use_container_width=True
         )
         
-        # Relatório 2: Apenas quantitativo inibindo todos os valores
+        # Lista quantitativa inibindo completamente a exibição de preços
         pdf_mat_sem_preco = f"========================================\n" \
                             f"  LISTA DE MATERIAIS (QUANTITATIVO)     \n" \
                             f"========================================\n\n"
@@ -474,7 +551,7 @@ with tab_industrial:
             use_container_width=True
         )
 
-    # --- CLÁUSULA DO WORD (MANTIDA ORIGINALMENTE) ---
+    # --- CLÁUSULA DO WORD REMANESCENTE DO CÓDIGO ORIGINAL ---
     def gerar_word_proposicao(orc, mats, tot):
         doc = Document()
         for s in doc.sections:
