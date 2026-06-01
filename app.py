@@ -97,7 +97,7 @@ for s in servicos_db:
 if 'lista_materiais' not in st.session_state:
     st.session_state.lista_materiais = []
 
-# --- MAPA DE PREÇOS ANTI-KEYERROR ---
+# --- MAPA DE PREÇOS ---
 precos = {}
 for s in servicos_db:
     precos[s["nome"]] = float(s["valor"])
@@ -191,26 +191,12 @@ with st.sidebar:
                         v_val = c_val.number_input("Valor por Kg (R$):", min_value=0.0, value=0.0, key="v_mat_kg_val")
                         if v_kg > 0: partes_nome_mat.append(f"{v_kg}kg")
                         custo_total_material += (v_kg * v_val)
-                        
-            # Lógica para acrescentar material estruturado na lista global de materiais
-            if st.button("Salvar Material no Serviço", use_container_width=True, key="save_mat_sidebar_btn"):
-                if nome_mat_base:
-                    nome_completo_mat = " ".join(partes_nome_mat)
-                    st.session_state.lista_materiais.append({
-                        "nome": nome_completo_mat,
-                        "qtd": 1.0,  # Valor base que será ajustado nas tabelas
-                        "unidade": uni_mat_base,
-                        "preco_calculado": custo_total_material
-                    })
-                    st.success("Material adicionado com sucesso!")
-                    time.sleep(0.4)
-                    st.rerun()
 def formatar_qtd(qtd, unidade):
     if unidade.lower() == "m":
         return f"{float(qtd):.1f}"
     return f"{int(qtd)}"
 
-# --- CÁLCULO PRÉVIO DE SERVIÇOS ATIVOS PARA OS CONTADORES DE ABAS ---
+# --- CÁLCULO PRÉVIO PARA OS CONTADORES DAS ABAS ---
 cont_predial_ativos = 0
 cont_industrial_ativos = 0
 
@@ -227,7 +213,7 @@ for k_serv, v_dado in st.session_state.dados_servicos.items():
             if s_info["tipo_categoria"] == "Predial": cont_predial_ativos += 1
             if s_info["tipo_categoria"] == "Industrial": cont_industrial_ativos += 1
 
-# --- ABAS PRINCIPAIS COM CONTADORES ---
+# --- ABAS PRINCIPAIS COM INDICADORES ---
 tab_predial, tab_industrial, tab_conf_serv = st.tabs([
     f"🏢 Predial ({cont_predial_ativos})", 
     f"🏭 Industrial ({cont_industrial_ativos})", 
@@ -293,6 +279,7 @@ with tab_predial:
                 st.rerun()
     else:
         st.info("Nenhum serviço predial configurado no banco de dados.")
+
 # --- ABA 2: INDUSTRIAL (MÃO DE OBRA) ---
 with tab_industrial:
     st.subheader("Lançamento de Mão de Obra - Industrial")
@@ -342,7 +329,6 @@ with tab_industrial:
                 st.rerun()
     else:
         st.info("Nenhum serviço industrial configurado no banco de dados.")
-
 # --- ABA 3: CONFERÊNCIA E FECHAMENTO GERAL ---
 with tab_conf_serv:
     st.subheader("🔍 Revisão de Serviços Lançados")
@@ -439,7 +425,27 @@ with tab_conf_serv:
             servicos_ativos = True
             soma_base_para_art += v_item
             itens_orc[servico] = v_item
-    # --- TABELA DE REVISÃO DE MATERIAIS (EDITÁVEL) ---
+
+    # --- PROCESSAMENTO ESPECÍFICO PARA PROJETOS/ART (Fixo + 55%) ---
+    for servico, dado in st.session_state.dados_servicos.items():
+        serv_info = next((s for s in servicos_db if s["nome"] == servico), None)
+        if serv_info and serv_info["tipo_input"] == "art" and dado:
+            servicos_ativos = True
+            v_art = precos[servico] + (soma_base_para_art * 0.55)
+            itens_orc[servico] = v_art
+            
+            with st.container(border=True):
+                cl1, cl2, cl3, cl4 = st.columns([0.4, 0.2, 0.2, 0.2])
+                cl1.write(servico)
+                cl2.write("Fixo + 55%")
+                cl3.write(f"R$ {v_art:.2f}")
+                if cl4.button("🗑️", key=f"del_aba_art_{servico}"):
+                    st.session_state.dados_servicos[servico] = False
+                    st.rerun()
+
+    if not servicos_ativos:
+        st.info("Nenhum serviço lançado até o momento.")
+      # --- TABELA DE REVISÃO DE MATERIAIS (EDITÁVEL) ---
     st.divider()
     st.markdown("### 📦 Materiais Lançados pela Barra Lateral")
     
@@ -494,60 +500,60 @@ with tab_conf_serv:
         st.write(f"### Valor Total de Materiais Informados: R$ {total_mats_calculado:.2f}")
     st.write(f"## 💰 Valor Geral da Proposta: R$ {valor_geral_proposta:.2f}")
 
-    # --- CENTRAL DE DOWNLOADS EXCLUSIVA VIA GERAÇÃO DE PDF ---
-    st.markdown("### 📄 Central de Exportação em PDF")
+    # --- CENTRAL DE DOWNLOADS VIA TEXTO FORMATADO (EVITA ARQUIVOS CORROMPIDOS) ---
+    st.markdown("### 📄 Central de Exportação de Relatórios")
     col_d1, col_d2, col_d3 = st.columns(3)
     
     if servicos_ativos:
-        pdf_mo_dados = f"========================================\n" \
+        txt_mo_dados = f"========================================\n" \
                        f"        RELATORIO DE MAO DE OBRA        \n" \
                        f"========================================\n\n"
         for serv, val in itens_orc.items():
-            pdf_mo_dados += f"- {serv}: R$ {val:.2f}\n"
-        pdf_mo_dados += f"\n----------------------------------------\n" \
+            txt_mo_dados += f"- {serv}: R$ {val:.2f}\n"
+        txt_mo_dados += f"\n----------------------------------------\n" \
                         f"VALOR TOTAL DA MAO DE OBRA: R$ {total_mo_calculado:.2f}\n" \
                         f"========================================\n"
                         
         col_d1.download_button(
-            label="📥 Baixar Mão de Obra (PDF)",
-            data=pdf_mo_dados,
-            file_name="mao_de_obra.pdf",
-            mime="application/pdf",
+            label="📥 Baixar Mão de Obra (.txt)",
+            data=txt_mo_dados,
+            file_name="mao_de_obra.txt",
+            mime="text/plain",
             use_container_width=True
         )
         
     if st.session_state.lista_materiais:
         # Relatório de materiais completo com custos
-        pdf_mat_com_preco = f"========================================\n" \
+        txt_mat_com_preco = f"========================================\n" \
                             f"   RELATORIO DE MATERIAIS (COM PRECOS)  \n" \
                             f"========================================\n\n"
         for item in st.session_state.lista_materiais:
-            pdf_mat_com_preco += f"- {item['nome']} | Qtd: {item['qtd']} {item['unidade']} | Valor: R$ {item.get('preco_calculado', 0.0):.2f}\n"
-        pdf_mat_com_preco += f"\n----------------------------------------\n" \
+            txt_mat_com_preco += f"- {item['nome']} | Qtd: {item['qtd']} {item['unidade']} | Valor: R$ {item.get('preco_calculado', 0.0):.2f}\n"
+        txt_mat_com_preco += f"\n----------------------------------------\n" \
                              f"VALOR TOTAL DOS MATERIAIS: R$ {total_mats_calculado:.2f}\n" \
                              f"========================================\n"
                              
         col_d2.download_button(
-            label="📥 Baixar Materiais com Preço (PDF)",
-            data=pdf_mat_com_preco,
-            file_name="materiais_com_precos.pdf",
-            mime="application/pdf",
+            label="📥 Baixar Materiais com Preço (.txt)",
+            data=txt_mat_com_preco,
+            file_name="materiais_com_precos.txt",
+            mime="text/plain",
             use_container_width=True
         )
         
         # Lista quantitativa inibindo completamente a exibição de preços
-        pdf_mat_sem_preco = f"========================================\n" \
+        txt_mat_sem_preco = f"========================================\n" \
                             f"  LISTA DE MATERIAIS (QUANTITATIVO)     \n" \
                             f"========================================\n\n"
         for item in st.session_state.lista_materiais:
-            pdf_mat_sem_preco += f"- {item['nome']} | Qtd: {item['qtd']} {item['unidade']}\n"
-        pdf_mat_sem_preco += f"========================================\n"
+            txt_mat_sem_preco += f"- {item['nome']} | Qtd: {item['qtd']} {item['unidade']}\n"
+        txt_mat_sem_preco += f"========================================\n"
         
         col_d3.download_button(
-            label="📥 Baixar Lista de Materiais Sem Preço (PDF)",
-            data=pdf_mat_sem_preco,
-            file_name="materiais_sem_precos.pdf",
-            mime="application/pdf",
+            label="📥 Baixar Lista de Materiais Sem Preço (.txt)",
+            data=txt_mat_sem_preco,
+            file_name="materiais_sem_precos.txt",
+            mime="text/plain",
             use_container_width=True
         )
 
