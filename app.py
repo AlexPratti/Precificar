@@ -97,11 +97,40 @@ for s in servicos_db:
 if 'lista_materiais' not in st.session_state:
     st.session_state.lista_materiais = []
 
+# Chaves para controlar o reset das caixas de seleção
+if 'reset_predial_key' not in st.session_state:
+    st.session_state.reset_predial_key = 0
+if 'reset_industrial_key' not in st.session_state:
+    st.session_state.reset_industrial_key = 0
+
 # --- MAPA DE PREÇOS ANTI-KEYERROR ---
 precos = {}
 for s in servicos_db:
     precos[s["nome"]] = float(s["valor"])
 
+# --- FUNÇÕES DE EXPORTAÇÃO COMPLEMENTARES ---
+def gerar_txt_mo(itens_orc, total_mo):
+    conteudo = "=== RELAÇÃO DE VALORES - MÃO DE OBRA ===\n\n"
+    for item, valor in itens_orc.items():
+        conteudo += f"- {item}: R$ {valor:.2f}\n"
+    conteudo += f"\n---------------------------------------\n"
+    conteudo += f"VALOR TOTAL MÃO DE OBRA: R$ {total_mo:.2f}\n"
+    return conteudo.encode('utf-8')
+
+def gerar_txt_materiais(lista_mats, total_mats, exibir_precos=True):
+    conteudo = "=== LISTA DE MATERIAIS ===\n\n"
+    for m in lista_mats:
+        nome = m.get('nome', 'Material sem nome')
+        qtd = m.get('qtd', 1)
+        if exibir_precos:
+            preco = m.get('preco_calculado', 0.0)
+            conteudo += f"- {nome} | Qtd: {qtd} | Custo: R$ {preco:.2f}\n"
+        else:
+            conteudo += f"- {nome} | Qtd: {qtd}\n"
+    if exibir_precos:
+        conteudo += f"\n---------------------------------------\n"
+        conteudo += f"VALOR TOTAL DE MATERIAIS: R$ {total_mats:.2f}\n"
+    return conteudo.encode('utf-8')
 # --- SIDEBAR REESTRUTURADA ---
 with st.sidebar:
     st.header("⚙️ Painel de Controle Global")
@@ -159,6 +188,7 @@ with st.sidebar:
                 st.success("Removido!")
                 time.sleep(0.4)
                 st.rerun()
+
     else:
         # --- PAINEL EXCLUSIVO DE MATERIAIS NA SIDEBAR ---
         st.subheader("📦 + Lançar Material para o Serviço")
@@ -191,7 +221,6 @@ with st.sidebar:
                         v_val = c_val.number_input("Valor por Kg (R$):", min_value=0.0, value=0.0, key="v_mat_kg_val")
                         if v_kg > 0: partes_nome_mat.append(f"{v_kg}kg")
                         custo_total_material += (v_kg * v_val)
-
 def formatar_qtd(qtd, unidade):
     if unidade.lower() == "m":
         return f"{float(qtd):.1f}"
@@ -214,7 +243,7 @@ with tab_predial:
             "Selecione o serviço predial para lançar/editar:", 
             opcoes_com_placeholder, 
             index=0, 
-            key="sel_predial_aba_placeholder"
+            key=f"sel_predial_aba_{st.session_state.reset_predial_key}"
         )
         
         if escolha_placeholder != "Clique aqui para selecionar serviço.":
@@ -252,7 +281,8 @@ with tab_predial:
                 elif dados_serv_escolhido["tipo_input"] == "art":
                     st.session_state.dados_servicos[escolha_serv] = inc_temporario
                 st.success(f"Serviço '{escolha_serv}' confirmado com sucesso!")
-                time.sleep(0.5)
+                st.session_state.reset_predial_key += 1
+                time.sleep(0.4)
                 st.rerun()
     else:
         st.info("Nenhum serviço predial configurado no banco de dados.")
@@ -264,24 +294,43 @@ with tab_industrial:
     nomes_industriais = [s["nome"] for s in servicos_industriais]
     
     if nomes_industriais:
-        escolha_serv_ind = st.selectbox("Selecione o serviço industrial para lançar/editar:", nomes_industriais, key="sel_ind_aba")
-        dados_serv_ind_escolhido = next(s for s in servicos_industriais if s["nome"] == escolha_serv_ind)
+        opcoes_com_placeholder_ind = ["Clique aqui para selecionar serviço."] + nomes_industriais
+        escolha_placeholder_ind = st.selectbox(
+            "Selecione o serviço industrial para lançar/editar:", 
+            opcoes_com_placeholder_ind, 
+            index=0, 
+            key=f"sel_industrial_aba_{st.session_state.reset_industrial_key}"
+        )
         
-        if dados_serv_ind_escolhido["tipo_input"] == "componentes":
-            st.session_state.dados_servicos[escolha_serv_ind] = st.number_input(
-                "Quantidade de Componentes (R$ 50,00 por componente):", min_value=0.0, step=1.0, 
-                value=float(st.session_state.dados_servicos.get(escolha_serv_ind, 0.0)), key=f"in_aba_ind_{escolha_serv_ind}"
-            )
-        elif dados_serv_ind_escolhido["tipo_input"] == "quantidade":
-            st.session_state.dados_servicos[escolha_serv_ind] = st.number_input(
-                "Quantidade:", min_value=0.0, step=1.0, 
-                value=float(st.session_state.dados_servicos.get(escolha_serv_ind, 0.0)), key=f"in_aba_ind_{escolha_serv_ind}"
-            )
-        elif dados_serv_ind_escolhido["tipo_input"] == "metragem":
-            st.session_state.dados_servicos[escolha_serv_ind] = st.number_input(
-                "Metragem (m):", min_value=0.0, step=0.5, 
-                value=float(st.session_state.dados_servicos.get(escolha_serv_ind, 0.0)), key=f"in_aba_ind_{escolha_serv_ind}"
-            )
+        if escolha_placeholder_ind != "Clique aqui para selecionar serviço.":
+            escolha_serv_ind = escolha_placeholder_ind
+            dados_serv_ind_escolhido = next(s for s in servicos_industriais if s["nome"] == escolha_serv_ind)
+            
+            valor_temporario_ind = None
+            
+            if dados_serv_ind_escolhido["tipo_input"] == "componentes":
+                valor_temporario_ind = st.number_input(
+                    "Quantidade de Componentes (R$ 50,00 por componente):", min_value=0.0, step=1.0, 
+                    value=None, placeholder="Digite a quantidade de componentes...", key=f"in_aba_ind_temp_{escolha_serv_ind}"
+                )
+            elif dados_serv_ind_escolhido["tipo_input"] == "quantidade":
+                valor_temporario_ind = st.number_input(
+                    "Quantidade:", min_value=0.0, step=1.0, 
+                    value=None, placeholder="Digite a quantidade...", key=f"in_aba_ind_temp_{escolha_serv_ind}"
+                )
+            elif dados_serv_ind_escolhido["tipo_input"] == "metragem":
+                valor_temporario_ind = st.number_input(
+                    "Metragem (m):", min_value=0.0, step=0.5, 
+                    value=None, placeholder="Digite a metragem...", key=f"in_aba_ind_temp_{escolha_serv_ind}"
+                )
+                
+            if st.button("Confirmar Serviço Industrial", type="primary", key=f"btn_confirmar_industrial_{escolha_serv_ind}"):
+                if dados_serv_ind_escolhido["tipo_input"] in ["quantidade", "metragem", "componentes"]:
+                    st.session_state.dados_servicos[escolha_serv_ind] = float(valor_temporario_ind) if valor_temporario_ind is not None else 0.0
+                st.success(f"Serviço '{escolha_serv_ind}' confirmado com sucesso!")
+                st.session_state.reset_industrial_key += 1
+                time.sleep(0.4)
+                st.rerun()
     else:
         st.info("Nenhum serviço industrial configurado no banco de dados.")
 # --- ABA 3: CONFERÊNCIA E FECHAMENTO GERAL ---
@@ -391,7 +440,7 @@ with tab_conf_serv:
                     st.session_state.lista_materiais.pop(i)
                     st.rerun()
 
-    # --- RESUMO GERAL E GERADOR DO ARQUIVO DOCX ---
+    # --- RESUMO GERAL, COMPORTAMENTO DE DOWNLOADS E ARQUIVOS ---
     st.divider()
     total_mo_calculado = sum(itens_orc.values())
     total_mats_calculado = sum([m.get("preco_calculado", 0.0) for m in st.session_state.lista_materiais])
@@ -402,7 +451,23 @@ with tab_conf_serv:
         st.write(f"### Valor Total de Materiais Informados: R$ {total_mats_calculado:.2f}")
     st.write(f"## 💰 Valor Geral da Proposta: R$ {valor_geral_proposta:.2f}")
 
-    def gerar_word_proposicao(orc, mats, tot):
-        doc = Document()
-        for s in doc.sections:
-            s.top_margin = Pt(72)
+    # --- SEÇÃO DE DOWNLOADS EXCLUSIVOS ---
+    st.markdown("### 📥 Baixar Relatórios Independentes")
+    col_d1, col_d2 = st.columns([0.5, 0.5])
+    
+    if total_mo_calculado > 0:
+        txt_mo_data = gerar_txt_mo(itens_orc, total_mo_calculado)
+        col_d1.download_button(
+            label="⬇️ Baixar Resumo de Mão de Obra (TXT)",
+            data=txt_mo_data,
+            file_name="resumo_mao_de_obra.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+        
+    if st.session_state.lista_materiais:
+        exibir_precos_no_txt = col_d2.checkbox("Incluir valores de custo na lista de materiais?", value=True, key="chk_exibir_precos_export")
+        txt_mat_data = gerar_txt_materials(st.session_state.lista_materiais, total_mats_calculado, exibir_precos=exibir_precos_no_txt)
+        col_d2.download_button(
+            label="⬇️ Baixar Lista de Materiais (TXT)",
+            data=txt_mat
