@@ -5,6 +5,7 @@ from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from io import BytesIO
 import time
+from fpdf import FPDF  # Certifique-se de adicionar fpdf2 no seu requirements.txt
 
 st.set_page_config(page_title="Sistema Elétrico Profissional", layout="wide")
 
@@ -191,20 +192,6 @@ with st.sidebar:
                         v_val = c_val.number_input("Valor por Kg (R$):", min_value=0.0, value=0.0, key="v_mat_kg_val")
                         if v_kg > 0: partes_nome_mat.append(f"{v_kg}kg")
                         custo_total_material += (v_kg * v_val)
-                        
-            # Lógica para acrescentar material estruturado na lista global de materiais
-            if st.button("Salvar Material no Serviço", use_container_width=True, key="save_mat_sidebar_btn"):
-                if nome_mat_base:
-                    nome_completo_mat = " ".join(partes_nome_mat)
-                    st.session_state.lista_materiais.append({
-                        "nome": nome_completo_mat,
-                        "qtd": 1.0,  # Valor base que será ajustado nas tabelas
-                        "unidade": uni_mat_base,
-                        "preco_calculado": custo_total_material
-                    })
-                    st.success("Material adicionado com sucesso!")
-                    time.sleep(0.4)
-                    st.rerun()
 def formatar_qtd(qtd, unidade):
     if unidade.lower() == "m":
         return f"{float(qtd):.1f}"
@@ -293,6 +280,7 @@ with tab_predial:
                 st.rerun()
     else:
         st.info("Nenhum serviço predial configurado no banco de dados.")
+
 # --- ABA 2: INDUSTRIAL (MÃO DE OBRA) ---
 with tab_industrial:
     st.subheader("Lançamento de Mão de Obra - Industrial")
@@ -342,7 +330,6 @@ with tab_industrial:
                 st.rerun()
     else:
         st.info("Nenhum serviço industrial configurado no banco de dados.")
-
 # --- ABA 3: CONFERÊNCIA E FECHAMENTO GERAL ---
 with tab_conf_serv:
     st.subheader("🔍 Revisão de Serviços Lançados")
@@ -382,7 +369,7 @@ with tab_conf_serv:
         if not serv_info:
             continue
             
-        v_item, exibir, label = 0.0, False, ""
+        v_item, exibir = 0.0, False
         
         if serv_info["tipo_input"] == "padrao":
             if isinstance(dado, dict) and dado.get("incluir"):
@@ -439,6 +426,26 @@ with tab_conf_serv:
             servicos_ativos = True
             soma_base_para_art += v_item
             itens_orc[servico] = v_item
+    # --- PROCESSAMENTO ESPECÍFICO PARA PROJETOS/ART (Fixo + 55%) ---
+    for servico, dado in st.session_state.dados_servicos.items():
+        serv_info = next((s for s in servicos_db if s["nome"] == servico), None)
+        if serv_info and serv_info["tipo_input"] == "art" and dado:
+            servicos_ativos = True
+            v_art = precos[servico] + (soma_base_para_art * 0.55)
+            itens_orc[servico] = v_art
+            
+            with st.container(border=True):
+                cl1, cl2, cl3, cl4 = st.columns([0.4, 0.2, 0.2, 0.2])
+                cl1.write(servico)
+                cl2.write("Fixo + 55%")
+                cl3.write(f"R$ {v_art:.2f}")
+                if cl4.button("🗑️", key=f"del_aba_art_{servico}"):
+                    st.session_state.dados_servicos[servico] = False
+                    st.rerun()
+
+    if not servicos_ativos:
+        st.info("Nenhum serviço lançado até o momento.")
+
     # --- TABELA DE REVISÃO DE MATERIAIS (EDITÁVEL) ---
     st.divider()
     st.markdown("### 📦 Materiais Lançados pela Barra Lateral")
@@ -456,12 +463,10 @@ with tab_conf_serv:
             with st.container(border=True):
                 m1, m2, m3, m4 = st.columns([0.4, 0.2, 0.2, 0.2])
                 
-                # Permite edição do nome do material em tempo real
                 st.session_state.lista_materiais[i]['nome'] = m1.text_input(
                     "Nome:", item['nome'], key=f"ed_aba_n_{i}", label_visibility="collapsed"
                 )
                 
-                # Divisão interna para editar Quantidade e Unidade lado a lado
                 sub_c1, sub_c2 = m2.columns([0.5, 0.5])
                 st.session_state.lista_materiais[i]['qtd'] = sub_c1.number_input(
                     "Qtd:", value=float(item['qtd']), step=1.0, key=f"ed_aba_q_{i}", label_visibility="collapsed"
@@ -478,81 +483,3 @@ with tab_conf_serv:
                 )
                 
                 m3.write(f"R$ {item.get('preco_calculado', 0.0):.2f}")
-                
-                if m4.button("🗑️", key=f"del_aba_m_{i}"):
-                    st.session_state.lista_materiais.pop(i)
-                    st.rerun()
-
-    # --- RESUMO GERAL DOS VALORES DO ORÇAMENTO ---
-    st.divider()
-    total_mo_calculado = sum(itens_orc.values())
-    total_mats_calculado = sum([m.get("preco_calculado", 0.0) for m in st.session_state.lista_materiais])
-    valor_geral_proposta = total_mo_calculado + total_mats_calculado
-    
-    st.write(f"### Valor Total da Mão de Obra: R$ {total_mo_calculado:.2f}")
-    if total_mats_calculado > 0:
-        st.write(f"### Valor Total de Materiais Informados: R$ {total_mats_calculado:.2f}")
-    st.write(f"## 💰 Valor Geral da Proposta: R$ {valor_geral_proposta:.2f}")
-
-    # --- CENTRAL DE DOWNLOADS EXCLUSIVA VIA GERAÇÃO DE PDF ---
-    st.markdown("### 📄 Central de Exportação em PDF")
-    col_d1, col_d2, col_d3 = st.columns(3)
-    
-    if servicos_ativos:
-        pdf_mo_dados = f"========================================\n" \
-                       f"        RELATORIO DE MAO DE OBRA        \n" \
-                       f"========================================\n\n"
-        for serv, val in itens_orc.items():
-            pdf_mo_dados += f"- {serv}: R$ {val:.2f}\n"
-        pdf_mo_dados += f"\n----------------------------------------\n" \
-                        f"VALOR TOTAL DA MAO DE OBRA: R$ {total_mo_calculado:.2f}\n" \
-                        f"========================================\n"
-                        
-        col_d1.download_button(
-            label="📥 Baixar Mão de Obra (PDF)",
-            data=pdf_mo_dados,
-            file_name="mao_de_obra.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
-        
-    if st.session_state.lista_materiais:
-        # Relatório de materiais completo com custos
-        pdf_mat_com_preco = f"========================================\n" \
-                            f"   RELATORIO DE MATERIAIS (COM PRECOS)  \n" \
-                            f"========================================\n\n"
-        for item in st.session_state.lista_materiais:
-            pdf_mat_com_preco += f"- {item['nome']} | Qtd: {item['qtd']} {item['unidade']} | Valor: R$ {item.get('preco_calculado', 0.0):.2f}\n"
-        pdf_mat_com_preco += f"\n----------------------------------------\n" \
-                             f"VALOR TOTAL DOS MATERIAIS: R$ {total_mats_calculado:.2f}\n" \
-                             f"========================================\n"
-                             
-        col_d2.download_button(
-            label="📥 Baixar Materiais com Preço (PDF)",
-            data=pdf_mat_com_preco,
-            file_name="materiais_com_precos.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
-        
-        # Lista quantitativa inibindo completamente a exibição de preços
-        pdf_mat_sem_preco = f"========================================\n" \
-                            f"  LISTA DE MATERIAIS (QUANTITATIVO)     \n" \
-                            f"========================================\n\n"
-        for item in st.session_state.lista_materiais:
-            pdf_mat_sem_preco += f"- {item['nome']} | Qtd: {item['qtd']} {item['unidade']}\n"
-        pdf_mat_sem_preco += f"========================================\n"
-        
-        col_d3.download_button(
-            label="📥 Baixar Lista de Materiais Sem Preço (PDF)",
-            data=pdf_mat_sem_preco,
-            file_name="materiais_sem_precos.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
-
-    # --- CLÁUSULA DO WORD REMANESCENTE DO CÓDIGO ORIGINAL ---
-    def gerar_word_proposicao(orc, mats, tot):
-        doc = Document()
-        for s in doc.sections:
-            s.top_margin = Pt(72)
