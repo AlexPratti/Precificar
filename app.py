@@ -159,7 +159,6 @@ with st.sidebar:
                 st.success("Removido!")
                 time.sleep(0.4)
                 st.rerun()
-
     else:
         # --- PAINEL EXCLUSIVO DE MATERIAIS NA SIDEBAR ---
         st.subheader("📦 + Lançar Material para o Serviço")
@@ -192,7 +191,6 @@ with st.sidebar:
                         v_val = c_val.number_input("Valor por Kg (R$):", min_value=0.0, value=0.0, key="v_mat_kg_val")
                         if v_kg > 0: partes_nome_mat.append(f"{v_kg}kg")
                         custo_total_material += (v_kg * v_val)
-# --- CONTINUAÇÃO DO CÓDIGO (PARTE 2 DE 2) ---
 
 def formatar_qtd(qtd, unidade):
     if unidade.lower() == "m":
@@ -211,28 +209,51 @@ with tab_predial:
     nomes_prediais = [s["nome"] for s in servicos_prediais]
     
     if nomes_prediais:
-        escolha_serv = st.selectbox("Selecione o serviço predial para lançar/editar:", nomes_prediais, key="sel_predial_aba")
-        dados_serv_escolhido = next(s for s in servicos_prediais if s["nome"] == escolha_serv)
+        opcoes_com_placeholder = ["Clique aqui para selecionar serviço."] + nomes_prediais
+        escolha_placeholder = st.selectbox(
+            "Selecione o serviço predial para lançar/editar:", 
+            opcoes_com_placeholder, 
+            index=0, 
+            key="sel_predial_aba_placeholder"
+        )
         
-        if dados_serv_escolhido["tipo_input"] == "quantidade":
-            st.session_state.dados_servicos[escolha_serv] = st.number_input(
-                "Quantidade (unidades/peças):", min_value=0.0, step=1.0, 
-                value=float(st.session_state.dados_servicos.get(escolha_serv, 0.0)), key=f"in_aba_pr_{escolha_serv}"
-            )
-        elif dados_serv_escolhido["tipo_input"] == "metragem":
-            st.session_state.dados_servicos[escolha_serv] = st.number_input(
-                "Metragem (m):", min_value=0.0, step=0.5, 
-                value=float(st.session_state.dados_servicos.get(escolha_serv, 0.0)), key=f"in_aba_pr_{escolha_serv}"
-            )
-        elif dados_serv_escolhido["tipo_input"] == "padrao":
-            d = st.session_state.dados_servicos.get(escolha_serv, {"incluir": False, "tipo": "Monofásico"})
-            inc = st.checkbox("Incluir Padrão no Orçamento?", value=d["incluir"], key="chk_aba_padrao_pr")
-            tipo = st.selectbox("Fase do Padrão:", ["Monofásico", "Bifásico", "Trifásico"], index=["Monofásico", "Bifásico", "Trifásico"].index(d["tipo"]), key="sel_aba_fase_pr")
-            st.session_state.dados_servicos[escolha_serv] = {"incluir": inc, "tipo": tipo}
-        elif dados_serv_escolhido["tipo_input"] == "art":
-            st.session_state.dados_servicos[escolha_serv] = st.checkbox(
-                "Incluir Projeto e taxa de ART?", value=bool(st.session_state.dados_servicos.get(escolha_serv, False)), key="chk_aba_art_pr"
-            )
+        if escolha_placeholder != "Clique aqui para selecionar serviço.":
+            escolha_serv = escolha_placeholder
+            dados_serv_escolhido = next(s for s in servicos_prediais if s["nome"] == escolha_serv)
+            
+            valor_temporario = None
+            inc_temporario = False
+            tipo_temporario = "Monofásico"
+            
+            if dados_serv_escolhido["tipo_input"] == "quantidade":
+                valor_temporario = st.number_input(
+                    "Quantidade (unidades/peças):", min_value=0.0, step=1.0, 
+                    value=None, placeholder="Digite a quantidade...", key=f"in_aba_pr_temp_{escolha_serv}"
+                )
+            elif dados_serv_escolhido["tipo_input"] == "metragem":
+                valor_temporario = st.number_input(
+                    "Metragem (m):", min_value=0.0, step=0.5, 
+                    value=None, placeholder="Digite a metragem...", key=f"in_aba_pr_temp_{escolha_serv}"
+                )
+            elif dados_serv_escolhido["tipo_input"] == "padrao":
+                d = st.session_state.dados_servicos.get(escolha_serv, {"incluir": False, "tipo": "Monofásico"})
+                inc_temporario = st.checkbox("Incluir Padrão no Orçamento?", value=d["incluir"], key="chk_aba_padrao_pr_temp")
+                tipo_temporario = st.selectbox("Fase do Padrão:", ["Monofásico", "Bifásico", "Trifásico"], index=["Monofásico", "Bifásico", "Trifásico"].index(d["tipo"]), key="sel_aba_fase_pr_temp")
+            elif dados_serv_escolhido["tipo_input"] == "art":
+                inc_temporario = st.checkbox(
+                    "Incluir Projeto e taxa de ART?", value=bool(st.session_state.dados_servicos.get(escolha_serv, False)), key="chk_aba_art_pr_temp"
+                )
+            
+            if st.button("Confirmar Serviço", type="primary", key=f"btn_confirmar_predial_{escolha_serv}"):
+                if dados_serv_escolhido["tipo_input"] in ["quantidade", "metragem"]:
+                    st.session_state.dados_servicos[escolha_serv] = float(valor_temporario) if valor_temporario is not None else 0.0
+                elif dados_serv_escolhido["tipo_input"] == "padrao":
+                    st.session_state.dados_servicos[escolha_serv] = {"incluir": inc_temporario, "tipo": tipo_temporario}
+                elif dados_serv_escolhido["tipo_input"] == "art":
+                    st.session_state.dados_servicos[escolha_serv] = inc_temporario
+                st.success(f"Serviço '{escolha_serv}' confirmado com sucesso!")
+                time.sleep(0.5)
+                st.rerun()
     else:
         st.info("Nenhum serviço predial configurado no banco de dados.")
 
@@ -263,7 +284,6 @@ with tab_industrial:
             )
     else:
         st.info("Nenhum serviço industrial configurado no banco de dados.")
-
 # --- ABA 3: CONFERÊNCIA E FECHAMENTO GERAL ---
 with tab_conf_serv:
     st.subheader("🔍 Revisão de Serviços Lançados")
