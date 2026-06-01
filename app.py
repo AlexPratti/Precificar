@@ -5,7 +5,6 @@ from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from io import BytesIO
 import time
-from fpdf import FPDF  # Certifique-se de adicionar fpdf2 no seu requirements.txt
 
 st.set_page_config(page_title="Sistema Elétrico Profissional", layout="wide")
 
@@ -102,6 +101,7 @@ if 'lista_materiais' not in st.session_state:
 precos = {}
 for s in servicos_db:
     precos[s["nome"]] = float(s["valor"])
+
 # --- SIDEBAR REESTRUTURADA ---
 with st.sidebar:
     st.header("⚙️ Painel de Controle Global")
@@ -354,98 +354,6 @@ with tab_conf_serv:
         
     st.divider()
     
-    # --- TABELA DE REVISÃO DE MÃO DE OBRA (EDITÁVEL) ---
-    st.markdown("### 📋 Serviços de Mão de Obra Incluídos")
-    c_h1, c_h2, c_h3, c_h4 = st.columns([0.4, 0.2, 0.2, 0.2])
-    c_h1.write("**Serviço / Item**")
-    c_h2.write("**Qtd / Unidade**")
-    c_h3.write("**Subtotal M.O.**")
-    c_h4.write("**Remover**")
-
-    itens_orc = {}
-    
-    for servico, dado in list(st.session_state.dados_servicos.items()):
-        serv_info = next((s for s in servicos_db if s["nome"] == servico), None)
-        if not serv_info:
-            continue
-            
-        v_item, exibir = 0.0, False
-        
-        if serv_info["tipo_input"] == "padrao":
-            if isinstance(dado, dict) and dado.get("incluir"):
-                v_item = precos[servico] * {"Monofásico": 1.0, "Bifásico": 1.4, "Trifásico": 1.7}[dado["tipo"]]
-                exibir = True
-                
-                with st.container(border=True):
-                    cl1, cl2, cl3, cl4 = st.columns([0.4, 0.2, 0.2, 0.2])
-                    cl1.write(servico)
-                    
-                    nova_fase = cl2.selectbox(
-                        "Fase:", ["Monofásico", "Bifásico", "Trifásico"], 
-                        index=["Monofásico", "Bifásico", "Trifásico"].index(dado["tipo"]), 
-                        key=f"ed_fase_tab_{servico}"
-                    )
-                    if nova_fase != dado["tipo"]:
-                        st.session_state.dados_servicos[servico]["tipo"] = nova_fase
-                        st.rerun()
-                        
-                    cl3.write(f"R$ {v_item:.2f}")
-                    if cl4.button("🗑️", key=f"del_aba_srv_{servico}"):
-                        st.session_state.dados_servicos[servico]["incluir"] = False
-                        st.rerun()
-                        
-        elif serv_info["tipo_input"] == "art":
-            continue
-        else:
-            if isinstance(dado, (int, float)) and dado > 0:
-                v_item = dado * precos[servico]
-                exibir = True
-                
-                with st.container(border=True):
-                    cl1, cl2, cl3, cl4 = st.columns([0.4, 0.2, 0.2, 0.2])
-                    cl1.write(servico)
-                    
-                    sub_cl1, sub_cl2 = cl2.columns([0.6, 0.4])
-                    novo_val_mo = sub_cl1.number_input(
-                        "Valor:", value=float(dado), step=0.5, key=f"ed_val_tab_{servico}", label_visibility="collapsed"
-                    )
-                    
-                    unidade_mo_exibida = "un" if serv_info["tipo_input"] == "quantidade" else ("m" if serv_info["tipo_input"] == "metragem" else "comp")
-                    sub_cl2.markdown(f"**{unidade_mo_exibida}**")
-                    
-                    if novo_val_mo != dado:
-                        st.session_state.dados_servicos[servico] = novo_val_mo
-                        st.rerun()
-                        
-                    cl3.write(f"R$ {v_item:.2f}")
-                    if cl4.button("🗑️", key=f"del_aba_srv_{servico}"):
-                        st.session_state.dados_servicos[servico] = 0.0
-                        st.rerun()
-        
-        if exibir:
-            servicos_ativos = True
-            soma_base_para_art += v_item
-            itens_orc[servico] = v_item
-    # --- PROCESSAMENTO ESPECÍFICO PARA PROJETOS/ART (Fixo + 55%) ---
-    for servico, dado in st.session_state.dados_servicos.items():
-        serv_info = next((s for s in servicos_db if s["nome"] == servico), None)
-        if serv_info and serv_info["tipo_input"] == "art" and dado:
-            servicos_ativos = True
-            v_art = precos[servico] + (soma_base_para_art * 0.55)
-            itens_orc[servico] = v_art
-            
-            with st.container(border=True):
-                cl1, cl2, cl3, cl4 = st.columns([0.4, 0.2, 0.2, 0.2])
-                cl1.write(servico)
-                cl2.write("Fixo + 55%")
-                cl3.write(f"R$ {v_art:.2f}")
-                if cl4.button("🗑️", key=f"del_aba_art_{servico}"):
-                    st.session_state.dados_servicos[servico] = False
-                    st.rerun()
-
-    if not servicos_ativos:
-        st.info("Nenhum serviço lançado até o momento.")
-
     # --- TABELA DE REVISÃO DE MATERIAIS (EDITÁVEL) ---
     st.divider()
     st.markdown("### 📦 Materiais Lançados pela Barra Lateral")
@@ -483,3 +391,72 @@ with tab_conf_serv:
                 )
                 
                 m3.write(f"R$ {item.get('preco_calculado', 0.0):.2f}")
+                
+                if m4.button("🗑️", key=f"del_aba_m_{i}"):
+                    st.session_state.lista_materiais.pop(i)
+                    st.rerun()
+
+    # --- RESUMO GERAL DOS VALORES DO ORÇAMENTO ---
+    st.divider()
+    total_mo_calculado = sum(itens_orc.values())
+    total_mats_calculado = sum([m.get("preco_calculado", 0.0) for m in st.session_state.lista_materiais])
+    valor_geral_proposta = total_mo_calculado + total_mats_calculado
+    
+    st.write(f"### Valor Total da Mão de Obra: R$ {total_mo_calculado:.2f}")
+    if total_mats_calculado > 0:
+        st.write(f"### Valor Total de Materiais Informados: R$ {total_mats_calculado:.2f}")
+    st.write(f"## 💰 Valor Geral da Proposta: R$ {valor_geral_proposta:.2f}")
+
+    # --- CENTRAL DE DOWNLOADS VIA GERAÇÃO DE CONTAINER HTML/PDF NATIVO ---
+    st.markdown("### 📄 Central de Exportação em PDF")
+    col_d1, col_d2, col_d3 = st.columns(3)
+    
+    # Estilo base CSS embutido para forçar o arquivo a abrir como documento perfeitamente formatado
+    style_print = "<style>body { font-family: monospace; padding: 20px; line-height: 1.4; } h2 { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; }</style>"
+    
+    if servicos_ativos:
+        html_mo = f"<html>{style_print}<body><h2>RELATORIO DE MAO DE OBRA</h2><br>"
+        for serv, val in itens_orc.items():
+            html_mo += f"<b>Servico:</b> {serv}<br><b>Subtotal:</b> R$ {val:.2f}<br><hr>"
+        html_mo += f"<br><br><h3>VALOR TOTAL DA MAO DE OBRA: R$ {total_mo_calculado:.2f}</h3></body></html>"
+                        
+        col_d1.download_button(
+            label="📥 Baixar Mão de Obra (PDF)",
+            data=html_mo,
+            file_name="mao_de_obra.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
+        
+    if st.session_state.lista_materiais:
+        html_mat_com_preco = f"<html>{style_print}<body><h2>RELATORIO DE MATERIAIS (COM PRECOS)</h2><br>"
+        for item in st.session_state.lista_materiais:
+            html_mat_com_preco += f"<b>Item:</b> {item['nome']}<br><b>Qtd:</b> {item['qtd']} {item['unidade']}<br><b>Valor:</b> R$ {item.get('preco_calculado', 0.0):.2f}<br><hr>"
+        html_mat_com_preco += f"<br><br><h3>VALOR TOTAL DOS MATERIAIS: R$ {total_mats_calculado:.2f}</h3></body></html>"
+                             
+        col_d2.download_button(
+            label="📥 Baixar Materiais com Preço (PDF)",
+            data=html_mat_com_preco,
+            file_name="materiais_com_precos.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
+        
+        html_mat_sem_preco = f"<html>{style_print}<body><h2>LISTA DE MATERIAIS (QUANTITATIVO)</h2><br>"
+        for item in st.session_state.lista_materiais:
+            html_mat_sem_preco += f"<b>Item:</b> {item['nome']}<br><b>Quantidade Solicitada:</b> {item['qtd']} {item['unidade']}<br><hr>"
+        html_mat_sem_preco += "</body></html>"
+        
+        col_d3.download_button(
+            label="📥 Baixar Lista de Materiais Sem Preço (PDF)",
+            data=html_mat_sem_preco,
+            file_name="materiais_sem_precos.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
+
+    # --- CLÁUSULA DO WORD REMANESCENTE DO CÓDIGO ORIGINAL ---
+    def gerar_word_proposicao(orc, mats, tot):
+        doc = Document()
+        for s in doc.sections:
+            s.top_margin = Pt(72)
