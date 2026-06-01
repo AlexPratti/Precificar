@@ -97,40 +97,10 @@ for s in servicos_db:
 if 'lista_materiais' not in st.session_state:
     st.session_state.lista_materiais = []
 
-# Chaves para controlar o reset das caixas de seleção
-if 'reset_predial_key' not in st.session_state:
-    st.session_state.reset_predial_key = 0
-if 'reset_industrial_key' not in st.session_state:
-    st.session_state.reset_industrial_key = 0
-
 # --- MAPA DE PREÇOS ANTI-KEYERROR ---
 precos = {}
 for s in servicos_db:
     precos[s["nome"]] = float(s["valor"])
-
-# --- FUNÇÕES DE EXPORTAÇÃO COMPLEMENTARES ---
-def gerar_txt_mo(itens_orc, total_mo):
-    conteudo = "=== RELAÇÃO DE VALORES - MÃO DE OBRA ===\n\n"
-    for item, valor in itens_orc.items():
-        conteudo += f"- {item}: R$ {valor:.2f}\n"
-    conteudo += f"\n---------------------------------------\n"
-    conteudo += f"VALOR TOTAL MÃO DE OBRA: R$ {total_mo:.2f}\n"
-    return conteudo.encode('utf-8')
-
-def gerar_txt_materiais(lista_mats, total_mats, exibir_precos=True):
-    conteudo = "=== LISTA DE MATERIAIS ===\n\n"
-    for m in lista_mats:
-        nome = m.get('nome', 'Material sem nome')
-        qtd = m.get('qtd', 1)
-        if exibir_precos:
-            preco = m.get('preco_calculado', 0.0)
-            conteudo += f"- {nome} | Qtd: {qtd} | Custo: R$ {preco:.2f}\n"
-        else:
-            conteudo += f"- {nome} | Qtd: {qtd}\n"
-    if exibir_precos:
-        conteudo += f"\n---------------------------------------\n"
-        conteudo += f"VALOR TOTAL DE MATERIAIS: R$ {total_mats:.2f}\n"
-    return conteudo.encode('utf-8')
 # --- SIDEBAR REESTRUTURADA ---
 with st.sidebar:
     st.header("⚙️ Painel de Controle Global")
@@ -239,11 +209,16 @@ with tab_predial:
     
     if nomes_prediais:
         opcoes_com_placeholder = ["Clique aqui para selecionar serviço."] + nomes_prediais
+        
+        # Reset dinâmico do selectbox após a confirmação bem-sucedida
+        if "reset_predial_select" not in st.session_state:
+            st.session_state.reset_predial_select = 0
+            
         escolha_placeholder = st.selectbox(
             "Selecione o serviço predial para lançar/editar:", 
             opcoes_com_placeholder, 
             index=0, 
-            key=f"sel_predial_aba_{st.session_state.reset_predial_key}"
+            key=f"sel_predial_aba_pl_{st.session_state.reset_predial_select}"
         )
         
         if escolha_placeholder != "Clique aqui para selecionar serviço.":
@@ -281,55 +256,58 @@ with tab_predial:
                 elif dados_serv_escolhido["tipo_input"] == "art":
                     st.session_state.dados_servicos[escolha_serv] = inc_temporario
                 st.success(f"Serviço '{escolha_serv}' confirmado com sucesso!")
-                st.session_state.reset_predial_key += 1
-                time.sleep(0.4)
+                st.session_state.reset_predial_select += 1
+                time.sleep(0.5)
                 st.rerun()
     else:
         st.info("Nenhum serviço predial configurado no banco de dados.")
 
-# --- ABA 2: INDUSTRIAL (MÃO DE OBRA) ---
+# --- ABA 2: INDUSTRIAL (MÃO DE OBRA REFATORADA) ---
 with tab_industrial:
     st.subheader("Lançamento de Mão de Obra - Industrial")
     servicos_industriais = [s for s in servicos_db if s["tipo_categoria"] == "Industrial"]
     nomes_industriais = [s["nome"] for s in servicos_industriais]
     
     if nomes_industriais:
-        opcoes_com_placeholder_ind = ["Clique aqui para selecionar serviço."] + nomes_industriais
-        escolha_placeholder_ind = st.selectbox(
+        opcoes_ind_placeholder = ["Clique aqui para selecionar serviço."] + nomes_industriais
+        
+        if "reset_industrial_select" not in st.session_state:
+            st.session_state.reset_industrial_select = 0
+            
+        escolha_ind_placeholder = st.selectbox(
             "Selecione o serviço industrial para lançar/editar:", 
-            opcoes_com_placeholder_ind, 
+            opcoes_ind_placeholder, 
             index=0, 
-            key=f"sel_industrial_aba_{st.session_state.reset_industrial_key}"
+            key=f"sel_ind_aba_pl_{st.session_state.reset_industrial_select}"
         )
         
-        if escolha_placeholder_ind != "Clique aqui para selecionar serviço.":
-            escolha_serv_ind = escolha_placeholder_ind
+        if escolha_ind_placeholder != "Clique aqui para selecionar serviço.":
+            escolha_serv_ind = escolha_ind_placeholder
             dados_serv_ind_escolhido = next(s for s in servicos_industriais if s["nome"] == escolha_serv_ind)
             
-            valor_temporario_ind = None
+            valor_ind_temporario = None
             
             if dados_serv_ind_escolhido["tipo_input"] == "componentes":
-                valor_temporario_ind = st.number_input(
+                valor_ind_temporario = st.number_input(
                     "Quantidade de Componentes (R$ 50,00 por componente):", min_value=0.0, step=1.0, 
                     value=None, placeholder="Digite a quantidade de componentes...", key=f"in_aba_ind_temp_{escolha_serv_ind}"
                 )
             elif dados_serv_ind_escolhido["tipo_input"] == "quantidade":
-                valor_temporario_ind = st.number_input(
+                valor_ind_temporario = st.number_input(
                     "Quantidade:", min_value=0.0, step=1.0, 
                     value=None, placeholder="Digite a quantidade...", key=f"in_aba_ind_temp_{escolha_serv_ind}"
                 )
             elif dados_serv_ind_escolhido["tipo_input"] == "metragem":
-                valor_temporario_ind = st.number_input(
+                valor_ind_temporario = st.number_input(
                     "Metragem (m):", min_value=0.0, step=0.5, 
                     value=None, placeholder="Digite a metragem...", key=f"in_aba_ind_temp_{escolha_serv_ind}"
                 )
                 
-            if st.button("Confirmar Serviço Industrial", type="primary", key=f"btn_confirmar_industrial_{escolha_serv_ind}"):
-                if dados_serv_ind_escolhido["tipo_input"] in ["quantidade", "metragem", "componentes"]:
-                    st.session_state.dados_servicos[escolha_serv_ind] = float(valor_temporario_ind) if valor_temporario_ind is not None else 0.0
-                st.success(f"Serviço '{escolha_serv_ind}' confirmado com sucesso!")
-                st.session_state.reset_industrial_key += 1
-                time.sleep(0.4)
+            if st.button("Confirmar Serviço Industrial", type="primary", key=f"btn_confirmar_ind_{escolha_serv_ind}"):
+                st.session_state.dados_servicos[escolha_serv_ind] = float(valor_ind_temporario) if valor_ind_temporario is not None else 0.0
+                st.success(f"Serviço Industrial '{escolha_serv_ind}' confirmado!")
+                st.session_state.reset_industrial_select += 1
+                time.sleep(0.5)
                 st.rerun()
     else:
         st.info("Nenhum serviço industrial configurado no banco de dados.")
@@ -363,6 +341,7 @@ with tab_conf_serv:
     c_h1.write("**Serviço / Item**"); c_h2.write("**Qtd / Tipo**"); c_h3.write("**Subtotal M.O.**"); c_h4.write("**Remover**")
 
     itens_orc = {}
+    relatorio_servicos_texto = "=== RELATÓRIO DE MÃO DE OBRA ===\n\n"
     
     for servico, dado in st.session_state.dados_servicos.items():
         serv_info = next((s for s in servicos_db if s["nome"] == servico), None)
@@ -392,6 +371,7 @@ with tab_conf_serv:
             servicos_ativos = True
             soma_base_para_art += v_item
             itens_orc[servico] = v_item
+            relatorio_servicos_texto += f"- {servico} ({label}): R$ {v_item:.2f}\n"
             with st.container(border=True):
                 cl1, cl2, cl3, cl4 = st.columns([0.4, 0.2, 0.2, 0.2])
                 cl1.write(servico); cl2.write(label); cl3.write(f"R$ {v_item:.2f}")
@@ -409,6 +389,7 @@ with tab_conf_serv:
             servicos_ativos = True
             v_art = precos[servico] + (soma_base_para_art * 0.55)
             itens_orc[servico] = v_art
+            relatorio_servicos_texto += f"- {servico} (Fixo + 55%): R$ {v_art:.2f}\n"
             with st.container(border=True):
                 cl1, cl2, cl3, cl4 = st.columns([0.4, 0.2, 0.2, 0.2])
                 cl1.write(servico); cl2.write("Fixo + 55%"); cl3.write(f"R$ {v_art:.2f}")
@@ -423,6 +404,9 @@ with tab_conf_serv:
     st.divider()
     st.markdown("### 📦 Materiais Lançados pela Barra Lateral")
     
+    relatorio_materiais_com_preco = "=== LISTA DE MATERIAIS (COM PREÇOS) ===\n\n"
+    relatorio_materiais_sem_preco = "=== LISTA DE MATERIAIS (APENAS QUANTITATIVO) ===\n\n"
+    
     if not st.session_state.lista_materiais:
         st.info("Nenhum material adicionado através da barra lateral.")
     else:
@@ -430,6 +414,8 @@ with tab_conf_serv:
         cm_h1.write("**Especificação Completa do Material**"); cm_h2.write("**Quantidade**"); cm_h3.write("**Custo Informado**"); cm_h4.write("**Remover**")
         
         for i, item in enumerate(st.session_state.lista_materiais):
+            relatorio_materiais_com_preco += f"- {item['nome']} | Qtd: {item['qtd']} | Custo: R$ {item.get('preco_calculado', 0.0):.2f}\n"
+            relatorio_materiais_sem_preco += f"- {item['nome']} | Qtd: {item['qtd']}\n"
             with st.container(border=True):
                 m1, m2, m3, m4 = st.columns([0.4, 0.2, 0.2, 0.2])
                 st.session_state.lista_materiais[i]['nome'] = m1.text_input("Nome:", item['nome'], key=f"ed_aba_n_{i}", label_visibility="collapsed")
@@ -440,34 +426,50 @@ with tab_conf_serv:
                     st.session_state.lista_materiais.pop(i)
                     st.rerun()
 
-    # --- RESUMO GERAL, COMPORTAMENTO DE DOWNLOADS E ARQUIVOS ---
+    # --- RESUMO GERAL ---
     st.divider()
     total_mo_calculado = sum(itens_orc.values())
     total_mats_calculado = sum([m.get("preco_calculado", 0.0) for m in st.session_state.lista_materiais])
     valor_geral_proposta = total_mo_calculado + total_mats_calculado
+    
+    relatorio_servicos_texto += f"\nTOTAL MÃO DE OBRA: R$ {total_mo_calculado:.2f}"
+    relatorio_materiais_com_preco += f"\nTOTAL MATERIAIS: R$ {total_mats_calculado:.2f}"
     
     st.write(f"### Valor Total da Mão de Obra: R$ {total_mo_calculado:.2f}")
     if total_mats_calculado > 0:
         st.write(f"### Valor Total de Materiais Informados: R$ {total_mats_calculado:.2f}")
     st.write(f"## 💰 Valor Geral da Proposta: R$ {valor_geral_proposta:.2f}")
 
-    # --- SEÇÃO DE DOWNLOADS EXCLUSIVOS ---
-    st.markdown("### 📥 Baixar Relatórios Independentes")
-    col_d1, col_d2 = st.columns([0.5, 0.5])
+    # --- SESSÃO EXCLUSIVA DE DOWNLOADS SEPARADOS E EXPORTAÇÕES ---
+    st.markdown("### 💾 Central de Downloads e Relatórios")
+    col_d1, col_d2, col_d3 = st.columns(3)
     
-    if total_mo_calculado > 0:
-        txt_mo_data = gerar_txt_mo(itens_orc, total_mo_calculado)
+    if servicos_ativos:
         col_d1.download_button(
-            label="⬇️ Baixar Resumo de Mão de Obra (TXT)",
-            data=txt_mo_data,
-            file_name="resumo_mao_de_obra.txt",
+            label="📥 Baixar Mão de Obra (.txt)",
+            data=relatorio_servicos_texto,
+            file_name="subtotal_mao_de_obra.txt",
             mime="text/plain",
             use_container_width=True
         )
         
     if st.session_state.lista_materiais:
-        exibir_precos_no_txt = col_d2.checkbox("Incluir valores de custo na lista de materiais?", value=True, key="chk_exibir_precos_export")
-        txt_mat_data = gerar_txt_materials(st.session_state.lista_materiais, total_mats_calculado, exibir_precos=exibir_precos_no_txt)
         col_d2.download_button(
-            label="⬇️ Baixar Lista de Materiais (TXT)",
-            data=txt_mat
+            label="📥 Baixar Materiais Completo (.txt)",
+            data=relatorio_materiais_com_preco,
+            file_name="lista_materiais_com_precos.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+        col_d3.download_button(
+            label="📥 Baixar Quantitativo de Materiais (Sem Preço) (.txt)",
+            data=relatorio_materials_sem_preco if 'relatorio_materials_sem_preco' in locals() else relatorio_materiais_sem_preco,
+            file_name="lista_materiais_apenas_quantitativo.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+
+    def gerar_word_proposicao(orc, mats, tot):
+        doc = Document()
+        for s in doc.sections:
+            s.top_margin = Pt(72)
